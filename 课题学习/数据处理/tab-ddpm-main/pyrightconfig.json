@@ -1,0 +1,13 @@
+{
+  "typeCheckingMode": "basic",
+  "reportPrivateImportUsage": "none",
+  "exclude": [
+    "**/site-packages/**",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*"
+  ],
+  "ignore": [
+    "C:/Users/Admin/anaconda3/envs/crashgen/Lib/site-packages"
+  ]
+}

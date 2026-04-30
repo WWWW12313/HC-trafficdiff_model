@@ -1,0 +1,11 @@
+# CausalDiffTab experiment config (auto-generated)
+model_name: ablation_no_causal
+experiment_id: ablation_no_causal
+lambda_causal: 0.0
+use_causal_masks: false
+hierarchical: true
+description: 分层 + Inpainting，但关闭因果（无 NOTEARS 掩码、lambda_causal=0）
+sampling:
+  mode: impute_stage3
+  num_samples: null
+  impute_indices_count: 2000

@@ -1,0 +1,11 @@
+# CausalDiffTab experiment config (auto-generated)
+model_name: ours_full_model
+experiment_id: ours_full_model
+lambda_causal: 1.0
+use_causal_masks: true
+hierarchical: true
+description: 完全体：动态因果掩码 + 分层 Inpainting（Stage1+Stage3）
+sampling:
+  mode: impute_stage3
+  num_samples: null
+  impute_indices_count: 2000

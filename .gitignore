@@ -1,0 +1,57 @@
+# Python / editor
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+.vscode/
+
+# Garbled duplicate directory created by path encoding issues
+璇鹃瀛︿範/
+
+# Runtime logs and caches
+logs/
+**/logs/
+cache/
+**/cache/
+**/runs/
+**/swanlog/
+**/exp/
+
+# Generated data, model checkpoints, and experiment outputs
+**/data/
+**/raw_data/
+**/ckpt/
+**/result/
+**/results/
+**/baseline_experiment/
+**/baseline_experiment_results/
+**/原始数据集/
+**/暂时不用（rubbish）/
+
+# Large/generated file types
+*.csv
+*.npy
+*.npz
+*.pt
+*.pth
+*.pkl
+*.joblib
+*.parquet
+*.feather
+*.graphml
+*.log
+*.zip
+*.pdf
+*.docx
+*.png
+*.jpg
+*.jpeg
+
+# OS junk
+.DS_Store
+Thumbs.db

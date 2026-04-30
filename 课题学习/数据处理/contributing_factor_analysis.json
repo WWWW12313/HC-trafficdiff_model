@@ -1,0 +1,312 @@
+{
+  "cf_columns": [
+    "CONTRIBUTING FACTOR VEHICLE 1",
+    "CONTRIBUTING FACTOR VEHICLE 2",
+    "CONTRIBUTING FACTOR VEHICLE 3",
+    "CONTRIBUTING FACTOR VEHICLE 4",
+    "CONTRIBUTING FACTOR VEHICLE 5"
+  ],
+  "total_rows": 199988,
+  "total_columns": 47,
+  "all_columns": [
+    "                                                    CRASH DATE",
+    "CRASH TIME",
+    "BOROUGH",
+    "ZIP CODE",
+    "LATITUDE",
+    "LONGITUDE",
+    "LOCATION",
+    "ON STREET NAME",
+    "CROSS STREET NAME",
+    "OFF STREET NAME",
+    "NUMBER OF PERSONS INJURED",
+    "NUMBER OF PERSONS KILLED",
+    "NUMBER OF PEDESTRIANS INJURED",
+    "NUMBER OF PEDESTRIANS KILLED",
+    "NUMBER OF CYCLIST INJURED",
+    "NUMBER OF CYCLIST KILLED",
+    "NUMBER OF MOTORIST INJURED",
+    "NUMBER OF MOTORIST KILLED",
+    "CONTRIBUTING FACTOR VEHICLE 1",
+    "CONTRIBUTING FACTOR VEHICLE 2",
+    "CONTRIBUTING FACTOR VEHICLE 3",
+    "CONTRIBUTING FACTOR VEHICLE 4",
+    "CONTRIBUTING FACTOR VEHICLE 5",
+    "COLLISION_ID",
+    "VEHICLE TYPE CODE 1",
+    "VEHICLE TYPE CODE 2",
+    "VEHICLE TYPE CODE 3",
+    "VEHICLE TYPE CODE 4",
+    "VEHICLE TYPE CODE 5",
+    "CRASH_FULL_TIME",
+    "TEMP_C",
+    "prcp",
+    "WIND_SPEED_KMH",
+    "coco",
+    "WEATHER_CONDITION",
+    "REAL_WEATHER",
+    "DIST_TO_SIGNAL_M",
+    "HAS_TRAFFIC_SIGNAL",
+    "OSM_TYPE",
+    "OSM_SPEED_TAG",
+    "OSM_LANES_TAG",
+    "OSM_ONEWAY",
+    "REAL_SPEED_LIMIT",
+    "HAS_DIVIDER",
+    "INFERRED_LANES",
+    "TOTAL_VEHICLES",
+    "IS_MULTI_VEHICLE"
+  ],
+  "top_50_factors": [
+    {
+      "factor": "Unspecified",
+      "count": 201123,
+      "percentage": 48.33444282360066
+    },
+    {
+      "factor": "Driver Inattention/Distraction",
+      "count": 58139,
+      "percentage": 13.972127361471928
+    },
+    {
+      "factor": "None_Involved",
+      "count": 27604,
+      "percentage": 6.633870615010082
+    },
+    {
+      "factor": "Following Too Closely",
+      "count": 22987,
+      "percentage": 5.5243002400824786
+    },
+    {
+      "factor": "Failure to Yield Right-of-Way",
+      "count": 15735,
+      "percentage": 3.781479282972889
+    },
+    {
+      "factor": "Passing or Lane Usage Improper",
+      "count": 11611,
+      "percentage": 2.790388049227723
+    },
+    {
+      "factor": "Backing Unsafely",
+      "count": 10783,
+      "percentage": 2.5914007695136108
+    },
+    {
+      "factor": "Passing Too Closely",
+      "count": 10223,
+      "percentage": 2.4568200006248393
+    },
+    {
+      "factor": "Unsafe Lane Changing",
+      "count": 8998,
+      "percentage": 2.162424568680652
+    },
+    {
+      "factor": "Other Vehicular",
+      "count": 8419,
+      "percentage": 2.0232776665617256
+    },
+    {
+      "factor": "Turning Improperly",
+      "count": 5974,
+      "percentage": 1.4356884166812862
+    },
+    {
+      "factor": "Traffic Control Disregarded",
+      "count": 4499,
+      "percentage": 1.081212284340326
+    },
+    {
+      "factor": "Driver Inexperience",
+      "count": 4434,
+      "percentage": 1.065591302237165
+    },
+    {
+      "factor": "Reaction to Uninvolved Vehicle",
+      "count": 4016,
+      "percentage": 0.9651363711737606
+    },
+    {
+      "factor": "Unsafe Speed",
+      "count": 3826,
+      "percentage": 0.9194750388722133
+    },
+    {
+      "factor": "Alcohol Involvement",
+      "count": 2402,
+      "percentage": 0.5772553694121945
+    },
+    {
+      "factor": "Pavement Slippery",
+      "count": 2257,
+      "percentage": 0.5424085631820661
+    },
+    {
+      "factor": "View Obstructed/Limited",
+      "count": 1959,
+      "percentage": 0.4707923683091128
+    },
+    {
+      "factor": "Oversized Vehicle",
+      "count": 1636,
+      "percentage": 0.39316810339648217
+    },
+    {
+      "factor": "Pedestrian/Bicyclist/Other Pedestrian Error/Confusion",
+      "count": 1633,
+      "percentage": 0.39244713499172085
+    },
+    {
+      "factor": "Aggressive Driving/Road Rage",
+      "count": 1013,
+      "percentage": 0.24344699800772396
+    },
+    {
+      "factor": "Passenger Distraction",
+      "count": 847,
+      "percentage": 0.20355341294426674
+    },
+    {
+      "factor": "Brakes Defective",
+      "count": 713,
+      "percentage": 0.17135015753159644
+    },
+    {
+      "factor": "Fell Asleep",
+      "count": 641,
+      "percentage": 0.15404691581732582
+    },
+    {
+      "factor": "Outside Car Distraction",
+      "count": 571,
+      "percentage": 0.1372243197062294
+    },
+    {
+      "factor": "Glare",
+      "count": 509,
+      "percentage": 0.1223243060078297
+    },
+    {
+      "factor": "Obstruction/Debris",
+      "count": 497,
+      "percentage": 0.1194404323887846
+    },
+    {
+      "factor": "Failure to Keep Right",
+      "count": 363,
+      "percentage": 0.08723717697611433
+    },
+    {
+      "factor": "Driverless/Runaway Vehicle",
+      "count": 279,
+      "percentage": 0.06705006164279861
+    },
+    {
+      "factor": "Steering Failure",
+      "count": 268,
+      "percentage": 0.0644065108253406
+    },
+    {
+      "factor": "Tire Failure/Inadequate",
+      "count": 249,
+      "percentage": 0.05984037759518585
+    },
+    {
+      "factor": "Fatigued/Drowsy",
+      "count": 240,
+      "percentage": 0.057677472380902026
+    },
+    {
+      "factor": "Pavement Defective",
+      "count": 225,
+      "percentage": 0.05407263035709565
+    },
+    {
+      "factor": "Illnes",
+      "count": 214,
+      "percentage": 0.05142907953963764
+    },
+    {
+      "factor": "Animals Action",
+      "count": 188,
+      "percentage": 0.04518068669837325
+    },
+    {
+      "factor": "Lost Consciousness",
+      "count": 181,
+      "percentage": 0.04349842708726361
+    },
+    {
+      "factor": "Lane Marking Improper/Inadequate",
+      "count": 131,
+      "percentage": 0.031482287007909025
+    },
+    {
+      "factor": "Drugs (illegal)",
+      "count": 130,
+      "percentage": 0.03124196420632193
+    },
+    {
+      "factor": "Accelerator Defective",
+      "count": 114,
+      "percentage": 0.027396799380928462
+    },
+    {
+      "factor": "Cell Phone (hand-Held)",
+      "count": 92,
+      "percentage": 0.022109697746012444
+    },
+    {
+      "factor": "Traffic Control Device Improper/Non-Working",
+      "count": 91,
+      "percentage": 0.02186937494442535
+    },
+    {
+      "factor": "Physical Disability",
+      "count": 52,
+      "percentage": 0.012496785682528773
+    },
+    {
+      "factor": "Other Electronic Device",
+      "count": 44,
+      "percentage": 0.01057420326983204
+    },
+    {
+      "factor": "Using On Board Navigation Device",
+      "count": 30,
+      "percentage": 0.007209684047612753
+    },
+    {
+      "factor": "Tow Hitch Defective",
+      "count": 24,
+      "percentage": 0.005767747238090203
+    },
+    {
+      "factor": "Eating or Drinking",
+      "count": 23,
+      "percentage": 0.005527424436503111
+    },
+    {
+      "factor": "Prescription Medication",
+      "count": 20,
+      "percentage": 0.0048064560317418355
+    },
+    {
+      "factor": "Tinted Windows",
+      "count": 20,
+      "percentage": 0.0048064560317418355
+    },
+    {
+      "factor": "Other Lighting Defects",
+      "count": 19,
+      "percentage": 0.004566133230154744
+    },
+    {
+      "factor": "Vehicle Vandalism",
+      "count": 16,
+      "percentage": 0.0038451648253934683
+    }
+  ]
+}

@@ -1,0 +1,988 @@
+{
+  "algorithm": "NOTEARS-MLP",
+  "device": "cuda",
+  "d": 47,
+  "n_samples": 173533,
+  "hidden_dim": 32,
+  "lambda1": 0.02,
+  "w_threshold": 0.3,
+  "target_density": 0.08,
+  "dynamic_prune_threshold": 0.255,
+  "n_edges": 214,
+  "density": 0.09898242368177614,
+  "elapsed_seconds": 336.9,
+  "feature_names": [
+    "LATITUDE",
+    "LONGITUDE",
+    "CRASH_TIME_SIN",
+    "CRASH_TIME_COS",
+    "TEMP_C",
+    "prcp",
+    "WIND_SPEED_KMH",
+    "DIST_TO_SIGNAL_M",
+    "INFERRED_LANES",
+    "SEASON",
+    "DAY_OF_WEEK",
+    "TIME_PERIOD",
+    "HAS_TRAFFIC_SIGNAL",
+    "OSM_ONEWAY",
+    "coco",
+    "WEATHER_CONDITION",
+    "OSM_TYPE",
+    "is_sedan",
+    "is_suv",
+    "is_taxi",
+    "is_truck",
+    "is_pickup",
+    "is_bus",
+    "is_van",
+    "is_motorcycle",
+    "is_bicycle",
+    "is_emergency",
+    "is_distracted",
+    "is_speeding",
+    "is_failure_to_yield",
+    "is_following_too_closely",
+    "is_drunk_driving",
+    "is_fatigue",
+    "is_view_obstructed",
+    "is_vehicle_defect",
+    "is_backing_unsafely",
+    "is_pedestrian_related",
+    "is_inexperience",
+    "is_pavement_slippery",
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+    "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",
+    "NUMBER_OF_CYCLIST_KILLED_BIN",
+    "NUMBER_OF_MOTORIST_INJURED_BIN",
+    "NUMBER_OF_MOTORIST_KILLED_BIN",
+    "TOTAL_VEHICLES",
+    "IS_MULTI_VEHICLE"
+  ],
+  "stage1_features": [
+    "LATITUDE",
+    "LONGITUDE",
+    "CRASH_TIME_SIN",
+    "CRASH_TIME_COS",
+    "SEASON",
+    "DAY_OF_WEEK",
+    "TIME_PERIOD"
+  ],
+  "stage2_features": [
+    "TEMP_C",
+    "prcp",
+    "WIND_SPEED_KMH",
+    "DIST_TO_SIGNAL_M",
+    "INFERRED_LANES",
+    "HAS_TRAFFIC_SIGNAL",
+    "OSM_ONEWAY",
+    "coco",
+    "WEATHER_CONDITION",
+    "OSM_TYPE"
+  ],
+  "stage3_features": [
+    "is_sedan",
+    "is_suv",
+    "is_taxi",
+    "is_truck",
+    "is_pickup",
+    "is_bus",
+    "is_van",
+    "is_motorcycle",
+    "is_bicycle",
+    "is_emergency",
+    "is_distracted",
+    "is_speeding",
+    "is_failure_to_yield",
+    "is_following_too_closely",
+    "is_drunk_driving",
+    "is_fatigue",
+    "is_view_obstructed",
+    "is_vehicle_defect",
+    "is_backing_unsafely",
+    "is_pedestrian_related",
+    "is_inexperience",
+    "is_pavement_slippery",
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+    "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",
+    "NUMBER_OF_CYCLIST_KILLED_BIN",
+    "NUMBER_OF_MOTORIST_INJURED_BIN",
+    "NUMBER_OF_MOTORIST_KILLED_BIN",
+    "TOTAL_VEHICLES",
+    "IS_MULTI_VEHICLE"
+  ],
+  "mutual_exclusion_groups": [
+    [
+      "is_sedan",
+      "is_suv",
+      "is_taxi",
+      "is_truck",
+      "is_pickup",
+      "is_bus",
+      "is_van",
+      "is_motorcycle",
+      "is_bicycle",
+      "is_emergency"
+    ]
+  ],
+  "edges": [
+    {
+      "src": "LATITUDE",
+      "tgt": "LONGITUDE"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "DIST_TO_SIGNAL_M"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_sedan"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_suv"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_pickup"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_bus"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_van"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_motorcycle"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_emergency"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_distracted"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_speeding"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_failure_to_yield"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_view_obstructed"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_vehicle_defect"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "NUMBER_OF_PEDESTRIANS_KILLED_BIN"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "NUMBER_OF_MOTORIST_INJURED_BIN"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "TOTAL_VEHICLES"
+    },
+    {
+      "src": "LATITUDE",
+      "tgt": "IS_MULTI_VEHICLE"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_sedan"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_suv"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_pickup"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_bus"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_van"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_motorcycle"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_emergency"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_distracted"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_speeding"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_failure_to_yield"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_view_obstructed"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_vehicle_defect"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "NUMBER_OF_PEDESTRIANS_KILLED_BIN"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "NUMBER_OF_MOTORIST_INJURED_BIN"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "LONGITUDE",
+      "tgt": "TOTAL_VEHICLES"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "CRASH_TIME_COS"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "TEMP_C"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "TIME_PERIOD"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "is_fatigue"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "CRASH_TIME_SIN",
+      "tgt": "IS_MULTI_VEHICLE"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "is_fatigue"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "CRASH_TIME_COS",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "TEMP_C",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "TEMP_C",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "TEMP_C",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "TEMP_C",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "TEMP_C",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "TEMP_C",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "prcp",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "prcp",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "prcp",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "prcp",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "prcp",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "WIND_SPEED_KMH",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "WIND_SPEED_KMH",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "WIND_SPEED_KMH",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "HAS_TRAFFIC_SIGNAL"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "DIST_TO_SIGNAL_M",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "NUMBER_OF_CYCLIST_INJURED_BIN"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "INFERRED_LANES",
+      "tgt": "IS_MULTI_VEHICLE"
+    },
+    {
+      "src": "SEASON",
+      "tgt": "TEMP_C"
+    },
+    {
+      "src": "SEASON",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "SEASON",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "SEASON",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "SEASON",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "SEASON",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "TEMP_C"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "DAY_OF_WEEK",
+      "tgt": "IS_MULTI_VEHICLE"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_sedan"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_suv"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_pickup"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_bus"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_van"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_motorcycle"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_emergency"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_distracted"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_speeding"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_failure_to_yield"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_view_obstructed"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_vehicle_defect"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "NUMBER_OF_PEDESTRIANS_KILLED_BIN"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "NUMBER_OF_MOTORIST_INJURED_BIN"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "TIME_PERIOD",
+      "tgt": "TOTAL_VEHICLES"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_inexperience"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "HAS_TRAFFIC_SIGNAL",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "OSM_ONEWAY",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "coco",
+      "tgt": "TEMP_C"
+    },
+    {
+      "src": "coco",
+      "tgt": "prcp"
+    },
+    {
+      "src": "coco",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "coco",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "coco",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "coco",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "TEMP_C"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "prcp"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "WIND_SPEED_KMH"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "SEASON"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "WEATHER_CONDITION",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "INFERRED_LANES"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_taxi"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_truck"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_bicycle"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_drunk_driving"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_backing_unsafely"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "OSM_TYPE",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "is_sedan",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_taxi",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_truck",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_pickup",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_bus",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_bicycle",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_distracted",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "is_distracted",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_speeding",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_failure_to_yield",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_following_too_closely",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "is_drunk_driving",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_backing_unsafely",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "is_pedestrian_related",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "NUMBER_OF_CYCLIST_INJURED_BIN",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "NUMBER_OF_CYCLIST_INJURED_BIN",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "NUMBER_OF_MOTORIST_INJURED_BIN",
+      "tgt": "is_fatigue"
+    },
+    {
+      "src": "NUMBER_OF_MOTORIST_INJURED_BIN",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "NUMBER_OF_MOTORIST_INJURED_BIN",
+      "tgt": "NUMBER_OF_MOTORIST_KILLED_BIN"
+    },
+    {
+      "src": "TOTAL_VEHICLES",
+      "tgt": "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    },
+    {
+      "src": "TOTAL_VEHICLES",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    },
+    {
+      "src": "IS_MULTI_VEHICLE",
+      "tgt": "is_following_too_closely"
+    },
+    {
+      "src": "IS_MULTI_VEHICLE",
+      "tgt": "is_pedestrian_related"
+    },
+    {
+      "src": "IS_MULTI_VEHICLE",
+      "tgt": "is_pavement_slippery"
+    },
+    {
+      "src": "IS_MULTI_VEHICLE",
+      "tgt": "NUMBER_OF_CYCLIST_KILLED_BIN"
+    }
+  ]
+}

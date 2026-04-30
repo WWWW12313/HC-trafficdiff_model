@@ -1,0 +1,219 @@
+{
+  "generated_at": "20260426_151034",
+  "description": "宏观因果骨架（7组），适配 2024→2025 迁移学习",
+  "matrix_shape": [
+    38,
+    38
+  ],
+  "feature_names": [
+    "LATITUDE",
+    "LONGITUDE",
+    "CRASH_TIME_SIN",
+    "CRASH_TIME_COS",
+    "TEMP_C",
+    "prcp",
+    "WIND_SPEED_KMH",
+    "DIST_TO_SIGNAL_M",
+    "INFERRED_LANES",
+    "SEASON",
+    "IS_WEEKEND",
+    "IS_AM_PEAK",
+    "IS_PM_PEAK",
+    "HAS_TRAFFIC_SIGNAL",
+    "OSM_ONEWAY",
+    "WEATHER_CONDITION",
+    "OSM_TYPE",
+    "is_rear_end",
+    "is_lane_change_related",
+    "is_pedestrian_involved",
+    "is_cyclist_involved",
+    "is_sedan",
+    "is_suv",
+    "is_taxi",
+    "is_truck",
+    "is_pickup",
+    "is_bus",
+    "is_van",
+    "is_motorcycle",
+    "is_bicycle",
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+    "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",
+    "NUMBER_OF_CYCLIST_KILLED_BIN",
+    "NUMBER_OF_MOTORIST_INJURED_BIN",
+    "NUMBER_OF_MOTORIST_KILLED_BIN",
+    "TOTAL_VEHICLES",
+    "IS_MULTI_VEHICLE"
+  ],
+  "n_features": 38,
+  "n_continuous": 9,
+  "n_categorical": 29,
+  "total_edges": 226,
+  "strong_edges": 112,
+  "weak_edges": 114,
+  "strength_tiers": {
+    "strong": 1.0,
+    "weak": 0.5,
+    "deleted": 0.0
+  },
+  "backbones": [
+    {
+      "backbone": 1,
+      "description": "时间 -> 事故类型",
+      "sources": [
+        "CRASH_TIME_SIN",
+        "CRASH_TIME_COS",
+        "SEASON",
+        "IS_WEEKEND",
+        "IS_AM_PEAK",
+        "IS_PM_PEAK"
+      ],
+      "targets": [
+        "is_rear_end",
+        "is_lane_change_related",
+        "is_pedestrian_involved",
+        "is_cyclist_involved"
+      ],
+      "strength": 1.0,
+      "tier": "强保留",
+      "rationale": "一天中不同时段、周末、高峰期决定驾驶行为模式，直接影响事故类型"
+    },
+    {
+      "backbone": 2,
+      "description": "时间语义 -> 伤亡结果（粗）",
+      "sources": [
+        "SEASON",
+        "IS_WEEKEND",
+        "IS_AM_PEAK",
+        "IS_PM_PEAK"
+      ],
+      "targets": [
+        "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+        "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+        "NUMBER_OF_CYCLIST_INJURED_BIN",
+        "NUMBER_OF_CYCLIST_KILLED_BIN",
+        "NUMBER_OF_MOTORIST_INJURED_BIN",
+        "NUMBER_OF_MOTORIST_KILLED_BIN"
+      ],
+      "strength": 0.5,
+      "tier": "弱约束",
+      "rationale": "时段影响车速和道路密度，间接影响伤亡严重程度；相关性较弱"
+    },
+    {
+      "backbone": 3,
+      "description": "空间 -> 路网属性",
+      "sources": [
+        "LATITUDE",
+        "LONGITUDE"
+      ],
+      "targets": [
+        "DIST_TO_SIGNAL_M",
+        "INFERRED_LANES",
+        "HAS_TRAFFIC_SIGNAL",
+        "OSM_ONEWAY",
+        "OSM_TYPE"
+      ],
+      "strength": 1.0,
+      "tier": "强保留",
+      "rationale": "经纬度直接决定所在路段的信号灯、车道数、道路类型等基础设施属性"
+    },
+    {
+      "backbone": 4,
+      "description": "天气/路网 -> 事故类型",
+      "sources": [
+        "TEMP_C",
+        "prcp",
+        "WIND_SPEED_KMH",
+        "WEATHER_CONDITION",
+        "DIST_TO_SIGNAL_M",
+        "INFERRED_LANES",
+        "HAS_TRAFFIC_SIGNAL",
+        "OSM_ONEWAY",
+        "OSM_TYPE"
+      ],
+      "targets": [
+        "is_rear_end",
+        "is_lane_change_related",
+        "is_pedestrian_involved",
+        "is_cyclist_involved"
+      ],
+      "strength": 0.5,
+      "tier": "弱约束",
+      "rationale": "雨雪天气和信号灯密度等路网条件影响事故类型分布；但跨年份变化较小"
+    },
+    {
+      "backbone": 5,
+      "description": "车辆类型 -> 事故类型 + 规模",
+      "sources": [
+        "is_sedan",
+        "is_suv",
+        "is_taxi",
+        "is_truck",
+        "is_pickup",
+        "is_bus",
+        "is_van",
+        "is_motorcycle",
+        "is_bicycle"
+      ],
+      "targets": [
+        "is_rear_end",
+        "is_lane_change_related",
+        "is_pedestrian_involved",
+        "is_cyclist_involved",
+        "TOTAL_VEHICLES",
+        "IS_MULTI_VEHICLE"
+      ],
+      "strength": 1.0,
+      "tier": "强保留",
+      "rationale": "车辆类型直接影响事故模式（自行车→涉骑行事故，货车→多车碰撞等）"
+    },
+    {
+      "backbone": 6,
+      "description": "车辆类型 -> 伤亡结果",
+      "sources": [
+        "is_sedan",
+        "is_suv",
+        "is_taxi",
+        "is_truck",
+        "is_pickup",
+        "is_bus",
+        "is_van",
+        "is_motorcycle",
+        "is_bicycle"
+      ],
+      "targets": [
+        "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+        "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+        "NUMBER_OF_CYCLIST_INJURED_BIN",
+        "NUMBER_OF_CYCLIST_KILLED_BIN",
+        "NUMBER_OF_MOTORIST_INJURED_BIN",
+        "NUMBER_OF_MOTORIST_KILLED_BIN"
+      ],
+      "strength": 0.5,
+      "tier": "弱约束",
+      "rationale": "摩托车/自行车涉及时伤亡率更高；但间接效应，通过事故类型中介传导"
+    },
+    {
+      "backbone": 7,
+      "description": "事故类型 -> 伤亡结果",
+      "sources": [
+        "is_rear_end",
+        "is_lane_change_related",
+        "is_pedestrian_involved",
+        "is_cyclist_involved"
+      ],
+      "targets": [
+        "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+        "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+        "NUMBER_OF_CYCLIST_INJURED_BIN",
+        "NUMBER_OF_CYCLIST_KILLED_BIN",
+        "NUMBER_OF_MOTORIST_INJURED_BIN",
+        "NUMBER_OF_MOTORIST_KILLED_BIN"
+      ],
+      "strength": 1.0,
+      "tier": "强保留",
+      "rationale": "涉行人/涉骑行事故直接决定行人/骑行者伤亡指标"
+    }
+  ],
+  "removed_vs_v1": "旧版 222 边密集因果图（列级超密连接 + 细粒度行为因子）→ 本版 7 组宏观骨架（soft 权重，仅保留跨年份稳定主链条）"
+}
