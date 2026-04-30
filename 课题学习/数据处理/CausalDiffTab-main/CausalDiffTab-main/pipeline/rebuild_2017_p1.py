@@ -38,7 +38,7 @@ PYTHON   = sys.executable
 # Step 1：PBF → OSM lanes tag（pyrosm + BallTree 最近邻匹配）
 # ──────────────────────────────────────────────────────────────────────────────
 
-def extract_osm_lanes(pbf_path: Path) -> pd.DataFrame:
+def extract_osm_lanes(pbf_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     用 pyrosm 从 PBF 提取所有 driving 道路的中心坐标与 lanes tag。
     返回 DataFrame: ['lon', 'lat', 'lanes_raw', 'lanes_int']
@@ -49,7 +49,10 @@ def extract_osm_lanes(pbf_path: Path) -> pd.DataFrame:
     print(f"  [PBF] 加载 {pbf_path.name} ...")
     osm = pyrosm.OSM(str(pbf_path))
     # 提取 driving 路网 edges（包含 lanes tag）
-    _, edges = osm.get_network(network_type="driving", nodes=True)
+    network = osm.get_network(network_type="driving", nodes=True)
+    if network is None:
+        raise RuntimeError("PBF 中未提取到 driving 路网")
+    _, edges = network
     if edges is None or len(edges) == 0:
         raise RuntimeError("PBF 中未提取到 driving 路网 edges")
 
