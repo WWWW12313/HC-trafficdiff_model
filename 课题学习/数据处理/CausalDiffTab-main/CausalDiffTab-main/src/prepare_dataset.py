@@ -167,6 +167,126 @@ def build_dataset_dir(
     return info
 
 
+def build_dataset_dir_from_splits(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    num_cols: list,
+    cat_cols: list,
+    target_col: str,
+    output_dir: str,
+    task_type: str = "regression",
+):
+    """Write an existing train/test split in TabDiff npy format without reshuffling."""
+    os.makedirs(output_dir, exist_ok=True)
+
+    valid_num = [c for c in num_cols if c in train_df.columns or c in test_df.columns]
+    valid_cat = [c for c in cat_cols if c in train_df.columns or c in test_df.columns]
+    missing_category = "__MISSING__"
+
+    train_export = train_df.copy()
+    test_export = test_df.copy()
+    for col in valid_num + valid_cat + ([target_col] if target_col else []):
+        if col not in train_export.columns:
+            train_export[col] = np.nan
+        if col not in test_export.columns:
+            test_export[col] = np.nan
+
+    combined = pd.concat([train_export, test_export], axis=0, ignore_index=True)
+    for col in valid_cat:
+        combined[col] = combined[col].where(combined[col].notna(), missing_category).astype(str)
+
+    train_n = len(train_export)
+    combined_num = combined[valid_num].apply(pd.to_numeric, errors="coerce").fillna(0).values.astype(np.float32)
+
+    cat_encoded = combined[valid_cat].copy()
+    cat_categories = {}
+    cat_label_mappings = {}
+    for col in valid_cat:
+        cat_col = cat_encoded[col].astype("category")
+        cat_encoded[col] = cat_col.cat.codes
+        cat_categories[col] = int(cat_col.cat.categories.size)
+        cat_label_mappings[col] = {int(i): str(v) for i, v in enumerate(cat_col.cat.categories)}
+    combined_cat = cat_encoded.values.astype(np.int64)
+
+    if target_col and target_col in combined.columns:
+        y_all = pd.to_numeric(combined[target_col], errors="coerce").fillna(0).values.astype(np.float32)
+    else:
+        y_all = np.zeros(len(combined), dtype=np.float32)
+
+    split_indices = {
+        "train": np.arange(train_n),
+        "test": np.arange(train_n, len(combined)),
+    }
+    for split_name, split_idx in split_indices.items():
+        np.save(os.path.join(output_dir, f"X_num_{split_name}.npy"), combined_num[split_idx])
+        np.save(os.path.join(output_dir, f"X_cat_{split_name}.npy"), combined_cat[split_idx])
+        np.save(os.path.join(output_dir, f"y_{split_name}.npy"), y_all[split_idx])
+
+    all_cols = valid_num + valid_cat + ([target_col] if target_col else [])
+    train_export = combined.iloc[:train_n][all_cols].copy()
+    test_export = combined.iloc[train_n:][all_cols].copy()
+    train_export.to_csv(os.path.join(output_dir, "train.csv"), index=False)
+    test_export.to_csv(os.path.join(output_dir, "test.csv"), index=False)
+
+    categories = [cat_categories[c] for c in valid_cat]
+    int_col_idx = []
+    for i, col in enumerate(valid_num):
+        vals = combined[col].dropna()
+        if len(vals) > 0 and (vals == vals.astype(int)).all():
+            int_col_idx.append(i)
+
+    n_num = len(valid_num)
+    n_cat = len(valid_cat)
+    num_col_idx = list(range(n_num))
+    cat_col_idx = list(range(n_num, n_num + n_cat))
+    target_col_idx = [n_num + n_cat] if target_col else []
+    all_col_names = all_cols
+    total_cols = len(all_col_names)
+
+    info = {
+        "task_type": task_type,
+        "n_num_features": n_num,
+        "n_cat_features": n_cat,
+        "n_classes": None if task_type == "regression" else int(y_all.max() + 1),
+        "train_size": train_n,
+        "test_size": len(test_export),
+        "train_num": train_n,
+        "test_num": len(test_export),
+        "val_num": 0,
+        "num_col_names": valid_num,
+        "cat_col_names": valid_cat,
+        "cat_sizes": categories,
+        "target_col": target_col,
+        "num_col_idx": num_col_idx,
+        "cat_col_idx": cat_col_idx,
+        "target_col_idx": target_col_idx,
+        "idx_mapping": {i: i for i in range(total_cols)},
+        "inverse_idx_mapping": {i: i for i in range(total_cols)},
+        "idx_name_mapping": {i: all_col_names[i] for i in range(total_cols)},
+        "column_names": all_col_names,
+        "int_col_idx_wrt_num": int_col_idx,
+        "cat_label_mappings": cat_label_mappings,
+    }
+
+    metadata = {"columns": {}}
+    for i in num_col_idx:
+        metadata["columns"][i] = {"sdtype": "numerical", "computer_representation": "Float"}
+    for i in cat_col_idx:
+        metadata["columns"][i] = {"sdtype": "categorical"}
+    for i in target_col_idx:
+        metadata["columns"][i] = {"sdtype": "numerical", "computer_representation": "Float"}
+    info["metadata"] = metadata
+
+    with open(os.path.join(output_dir, "info.json"), "w", encoding="utf-8") as f:
+        json.dump(info, f, indent=2, ensure_ascii=False)
+
+    print(f"[prepare-split] {output_dir}")
+    print(f"  X_num: {combined_num.shape[1]} cols, X_cat: {combined_cat.shape[1]} cols")
+    print(f"  categories: {categories}")
+    print(f"  train={train_n}, test={len(test_export)}")
+    return info
+
+
 def build_causal_mask_for_model(
     notears_npy: str,
     info: dict,
@@ -255,6 +375,9 @@ def run_prepare(
     base_output: str,
     target_col: str = "NUMBER OF PERSONS INJURED",
     seed: int = 42,
+    input_test_csv: str = None,
+    full_dataname: str = "nyc_crash",
+    stage1_dataname: str = "nyc_stage1",
 ):
     """
     主流程:
@@ -271,19 +394,29 @@ def run_prepare(
         groups = json.load(f)
 
     df = pd.read_csv(input_csv, low_memory=False)
+    df_test = pd.read_csv(input_test_csv, low_memory=False) if input_test_csv else None
     print(f"[load] {len(df)} rows from {input_csv}")
+    if df_test is not None:
+        print(f"[load] {len(df_test)} test rows from {input_test_csv}")
 
     # ============================================
     # Stage 1: 时空锚点 (Spatiotemporal Anchor)
     # ============================================
-    stage1_dir = os.path.join(base_output, "data", "nyc_stage1")
+    stage1_dir = os.path.join(base_output, "data", stage1_dataname)
     stage1_num = groups["stage1_continuous"]   # LAT, LON, time_sin, time_cos
     stage1_cat = groups["stage1_categorical"]  # SEASON, DAY_OF_WEEK, TIME_PERIOD
-    stage1_info = build_dataset_dir(
-        df, num_cols=stage1_num, cat_cols=stage1_cat,
-        target_col=target_col, output_dir=stage1_dir,
-        task_type="regression", seed=seed,
-    )
+    if df_test is not None:
+        stage1_info = build_dataset_dir_from_splits(
+            df, df_test, num_cols=stage1_num, cat_cols=stage1_cat,
+            target_col=target_col, output_dir=stage1_dir,
+            task_type="regression",
+        )
+    else:
+        stage1_info = build_dataset_dir(
+            df, num_cols=stage1_num, cat_cols=stage1_cat,
+            target_col=target_col, output_dir=stage1_dir,
+            task_type="regression", seed=seed,
+        )
 
     # Stage 1 causal mask: extract sub-block from NOTEARS full matrix
     W_full = np.load(notears_npy).astype(np.float32)
@@ -331,14 +464,21 @@ def run_prepare(
     # ============================================
     # Stage 3: Full (all features)
     # ============================================
-    full_dir = os.path.join(base_output, "data", "nyc_crash")
+    full_dir = os.path.join(base_output, "data", full_dataname)
     full_num = groups["continuous_cols"]
     full_cat = groups["categorical_cols"]
-    full_info = build_dataset_dir(
-        df, num_cols=full_num, cat_cols=full_cat,
-        target_col=target_col, output_dir=full_dir,
-        task_type="regression", seed=seed,
-    )
+    if df_test is not None:
+        full_info = build_dataset_dir_from_splits(
+            df, df_test, num_cols=full_num, cat_cols=full_cat,
+            target_col=target_col, output_dir=full_dir,
+            task_type="regression",
+        )
+    else:
+        full_info = build_dataset_dir(
+            df, num_cols=full_num, cat_cols=full_cat,
+            target_col=target_col, output_dir=full_dir,
+            task_type="regression", seed=seed,
+        )
 
     # Stage 3 causal mask: from NOTEARS
     mask_dir = os.path.join(full_dir, "causal_masks")
@@ -351,9 +491,9 @@ def run_prepare(
     # 创建 synthetic 目录 (evaluation 需要)
     # ============================================
     synthetic_targets = [
-        ("nyc_stage1", "nyc_stage1"),
-        ("nyc_spatial", "nyc_stage1"),  # 兼容旧脚本别名
-        ("nyc_crash", "nyc_crash"),
+        (stage1_dataname, stage1_dataname),
+        ("nyc_spatial" if stage1_dataname == "nyc_stage1" else f"nyc_spatial_{full_dataname}", stage1_dataname),
+        (full_dataname, full_dataname),
     ]
     for syn_name, data_name in synthetic_targets:
         syn_dir = os.path.join(base_output, "synthetic", syn_name)
@@ -397,6 +537,9 @@ def main():
         type=str,
         default=str(CDT_ROOT),
     )
+    parser.add_argument("--input_test_csv", type=str, default=None)
+    parser.add_argument("--full_dataname", type=str, default="nyc_crash")
+    parser.add_argument("--stage1_dataname", type=str, default="nyc_stage1")
     parser.add_argument("--seed", type=int, default=42)
 
     args = parser.parse_args()
@@ -406,6 +549,9 @@ def main():
         column_groups_json=args.column_groups_json,
         notears_npy=args.notears_npy,
         base_output=args.output_base,
+        input_test_csv=args.input_test_csv,
+        full_dataname=args.full_dataname,
+        stage1_dataname=args.stage1_dataname,
         seed=args.seed,
     )
 

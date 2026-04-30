@@ -429,7 +429,10 @@ def train_stage(
 
     _exp_suffix = f"_{experiment_id}" if experiment_id else ""
     if stage == 1:
-        dataname = "nyc_stage1"
+        if dataname and dataname.startswith("nyc_crash_"):
+            dataname = dataname.replace("nyc_crash", "nyc_stage1", 1)
+        else:
+            dataname = "nyc_stage1"
         exp_name = f"stage1_spatial_{tier}{_exp_suffix}"
     else:
         dataname = dataname or "nyc_crash"
