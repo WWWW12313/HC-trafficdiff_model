@@ -218,8 +218,10 @@ def _prepare_xy(
     return X, y
 
 
-def _load_info() -> dict:
-    p = CDT_ROOT / "data" / "nyc_crash" / "info.json"
+def _load_info(info_json: Optional[str] = None) -> dict:
+    p = Path(info_json) if info_json else CDT_ROOT / "data" / "nyc_crash" / "info.json"
+    if not p.is_absolute():
+        p = CDT_ROOT / p
     if not p.is_file():
         return {}
     with open(p, encoding="utf-8") as f:
@@ -392,6 +394,12 @@ def main():
         help="默认从 data/nyc_crash/info.json 读取 target_col",
     )
     parser.add_argument(
+        "--info_json",
+        type=str,
+        default=None,
+        help="评估 schema/info.json 路径；2024 源域实验应传 data/nyc_crash_2024/info.json",
+    )
+    parser.add_argument(
         "--file_glob",
         type=str,
         default="*.csv",
@@ -455,7 +463,7 @@ def main():
     )
     args = parser.parse_args()
 
-    info = _load_info()
+    info = _load_info(args.info_json)
     task_type = str(args.task_type or info.get("task_type", "classification")).lower()
     if task_type not in {"regression", "classification"}:
         raise SystemExit(f"不支持的 task_type: {task_type}，仅支持 regression/classification")

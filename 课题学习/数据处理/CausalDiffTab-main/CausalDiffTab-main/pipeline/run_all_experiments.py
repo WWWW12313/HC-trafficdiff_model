@@ -42,6 +42,7 @@ def _run_train_stage(
     lambda_causal: float,
     use_causal_masks: bool,
     device: str,
+    dataname: str,
 ) -> None:
     cmd = [
         sys.executable,
@@ -57,6 +58,8 @@ def _run_train_stage(
         "--device",
         device,
     ]
+    if stage == 3:
+        cmd.extend(["--dataname", dataname])
     if not use_causal_masks:
         cmd.append("--no_causal_masks")
     print("[run]", " ".join(cmd))
@@ -151,6 +154,18 @@ def main():
         action="store_true",
         help="若当前模式为 impute_stage3，额外导出一份 unconditional 对照样本",
     )
+    parser.add_argument(
+        "--dataname",
+        type=str,
+        default="nyc_crash",
+        help="Stage 3 训练/采样数据目录名，位于 data/ 下，例如 nyc_crash_2024",
+    )
+    parser.add_argument(
+        "--synthetic_dir",
+        type=str,
+        default=None,
+        help="合成结果输出目录；默认 results/synthetic",
+    )
     parser.add_argument("--road_graphml", type=str, default=None,
                         help="OSM graphml 路径，启用路网 snap")
     parser.add_argument("--road_signals", type=str, default=None,
@@ -173,29 +188,32 @@ def main():
     sampling = cfg.get("sampling") or {}
     mode = sampling.get("mode", "unconditional")
 
-    syn_dir = CDT_ROOT / "results" / "synthetic"
+    syn_dir = Path(args.synthetic_dir) if args.synthetic_dir else CDT_ROOT / "results" / "synthetic"
+    if not syn_dir.is_absolute():
+        syn_dir = CDT_ROOT / syn_dir
     syn_dir.mkdir(parents=True, exist_ok=True)
     final_csv = syn_dir / f"{args.model}_{args.tier}.csv"
 
     if not args.skip_train:
         if hierarchical:
             _run_train_stage(
-                1, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device
+                1, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
             )
         _run_train_stage(
-            3, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device
+            3, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
         )
 
     if args.skip_sample:
         print("[skip_sample] 训练结束，未生成合成 CSV")
         return
 
-    ckpt_dir = CDT_ROOT / "ckpt" / "nyc_crash" / f"stage3_full_{args.tier}_{experiment_id}"
+    ckpt_dir = CDT_ROOT / "ckpt" / args.dataname / f"stage3_full_{args.tier}_{experiment_id}"
     if not (ckpt_dir / "config.pkl").is_file():
         raise SystemExit(f"缺少 checkpoint 目录或 config.pkl: {ckpt_dir}")
 
     num_samples = _default_num_samples(cfg, args.tier)
-    data_dir = str(CDT_ROOT / "data" / "nyc_crash")
+    data_root = CDT_ROOT / "data" / args.dataname
+    data_dir = str(data_root)
     raw_out = syn_dir / f"_{args.model}_{args.tier}_samples.csv"
 
     sys.path.insert(0, str(CDT_ROOT))
@@ -205,7 +223,7 @@ def main():
     if mode == "impute_stage3":
         n_idx = int(sampling.get("impute_indices_count", num_samples))
         idx_file = CDT_ROOT / "results" / "_cache" / f"impute_base_{args.model}_{args.tier}.txt"
-        train_rows = _infer_train_rows(CDT_ROOT / "data" / "nyc_crash")
+        train_rows = _infer_train_rows(data_root)
         _write_random_impute_indices_file(n_idx, train_rows, args.impute_index_seed, idx_file)
         print(
             "[note] mode=impute_stage3: Stage1/2 将来自真实训练行条件，"
@@ -265,6 +283,8 @@ def main():
         "tier": args.tier,
         "mode": mode,
         "num_samples": int(num_samples),
+        "dataname": args.dataname,
+        "synthetic_dir": str(syn_dir),
         "impute_index_seed": int(args.impute_index_seed),
         "used_condition_indices": bool(cond_indices),
     }

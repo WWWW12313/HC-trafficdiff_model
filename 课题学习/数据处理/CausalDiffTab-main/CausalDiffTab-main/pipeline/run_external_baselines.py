@@ -27,19 +27,19 @@ TIER_ROWS = {
 }
 
 
-def _load_info() -> dict:
-    info_path = CDT_ROOT / "data" / "nyc_crash" / "info.json"
+def _load_info(dataname: str) -> dict:
+    info_path = CDT_ROOT / "data" / dataname / "info.json"
     if not info_path.is_file():
         return {}
     with open(info_path, encoding="utf-8") as f:
         return json.load(f)
 
 
-def _resolve_real_train_path() -> Path:
+def _resolve_real_train_path(dataname: str) -> Path:
     candidates = [
-        CDT_ROOT / "synthetic" / "nyc_crash" / "real.csv",
-        CDT_ROOT / "synthetic" / "nyc_crash" / "train.csv",
-        CDT_ROOT / "data" / "nyc_crash" / "train.csv",
+        CDT_ROOT / "synthetic" / dataname / "real.csv",
+        CDT_ROOT / "synthetic" / dataname / "train.csv",
+        CDT_ROOT / "data" / dataname / "train.csv",
     ]
     for p in candidates:
         if p.is_file():
@@ -331,8 +331,7 @@ def _clip_target_distribution(
     return syn
 
 
-def _write_output(df: pd.DataFrame, name: str, tier: str) -> Path:
-    out_dir = CDT_ROOT / "results" / "synthetic"
+def _write_output(df: pd.DataFrame, name: str, tier: str, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{name}_{tier}.csv"
     df.to_csv(out_path, index=False)
@@ -349,12 +348,27 @@ def main() -> None:
         help="Data subsampling tier.",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--dataname",
+        type=str,
+        default="nyc_crash",
+        help="训练源域数据目录名，位于 data/ 下，例如 nyc_crash_2024",
+    )
+    parser.add_argument(
+        "--synthetic_dir",
+        type=str,
+        default=None,
+        help="baseline 输出目录；默认 results/synthetic",
+    )
     args = parser.parse_args()
 
     np.random.seed(args.seed)
 
-    info = _load_info()
-    real_path = _resolve_real_train_path()
+    info = _load_info(args.dataname)
+    real_path = _resolve_real_train_path(args.dataname)
+    out_dir = Path(args.synthetic_dir) if args.synthetic_dir else CDT_ROOT / "results" / "synthetic"
+    if not out_dir.is_absolute():
+        out_dir = CDT_ROOT / out_dir
     real_df_full = pd.read_csv(real_path, low_memory=False)
     real_df = _sample_by_tier(real_df_full, tier=args.tier, seed=args.seed)
     n = len(real_df)
@@ -374,9 +388,9 @@ def main() -> None:
     target_col = info.get("target_col", "NUMBER OF PERSONS INJURED")
     ctgan_aligned = _clip_target_distribution(ctgan_aligned, real_df_full, target_col)
 
-    p1 = _write_output(ctgan_aligned, "baseline_ctgan", args.tier)
-    p2 = _write_output(tvae_aligned, "baseline_tvae", args.tier)
-    p3 = _write_output(smote_aligned, "baseline_smote", args.tier)
+    p1 = _write_output(ctgan_aligned, "baseline_ctgan", args.tier, out_dir)
+    p2 = _write_output(tvae_aligned, "baseline_tvae", args.tier, out_dir)
+    p3 = _write_output(smote_aligned, "baseline_smote", args.tier, out_dir)
 
     print(f"[write] {p1}")
     print(f"[write] {p2}")

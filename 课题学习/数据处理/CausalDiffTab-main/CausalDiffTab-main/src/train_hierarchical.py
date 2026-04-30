@@ -412,6 +412,7 @@ def train_stage(
     lambda_causal: float = 1.0,
     use_causal_masks: bool = True,
     mask_subdir: str = "causal_masks",
+    dataname: Optional[str] = None,
 ):
     """训练指定 Stage 的扩散模型
 
@@ -431,7 +432,7 @@ def train_stage(
         dataname = "nyc_stage1"
         exp_name = f"stage1_spatial_{tier}{_exp_suffix}"
     else:
-        dataname = "nyc_crash"
+        dataname = dataname or "nyc_crash"
         exp_name = f"stage3_full_{tier}{_exp_suffix}"
 
     data_dir = str(CDT_ROOT / "data" / dataname)
@@ -650,6 +651,12 @@ def main():
         default="causal_masks",
         help="掩码子目录名 (默认 causal_masks=binary; soft 实验传 causal_masks_soft)",
     )
+    parser.add_argument(
+        "--dataname",
+        type=str,
+        default=None,
+        help="Stage 3 数据目录名（位于 data/ 下），例如 nyc_crash_2024；Stage 1 仍使用 nyc_stage1",
+    )
     args = parser.parse_args()
 
     if args.device.startswith("cuda") and not torch.cuda.is_available():
@@ -666,6 +673,7 @@ def main():
         lambda_causal=args.lambda_causal,
         use_causal_masks=not args.no_causal_masks,
         mask_subdir=args.mask_subdir,
+        dataname=args.dataname,
     )
 
 
