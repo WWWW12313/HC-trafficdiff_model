@@ -58,8 +58,7 @@ def _run_train_stage(
         "--device",
         device,
     ]
-    if stage == 3:
-        cmd.extend(["--dataname", dataname])
+    cmd.extend(["--dataname", dataname])
     if not use_causal_masks:
         cmd.append("--no_causal_masks")
     print("[run]", " ".join(cmd))
