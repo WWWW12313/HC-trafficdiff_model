@@ -217,6 +217,7 @@ def enrich_osm(df: pd.DataFrame, graphml_path: Path, signals_path: Optional[Path
     )
 
     osm_type_list, osm_lanes_list, osm_oneway_list = [], [], []
+    osm_speed_list, has_divider_list = [], []
     for u, v, key in ne_edges:
         edge = G.get_edge_data(u, v, key) or {}
 
@@ -224,9 +225,17 @@ def enrich_osm(df: pd.DataFrame, graphml_path: Path, signals_path: Optional[Path
             val = edge.get(k, default)
             return val[0] if isinstance(val, list) else val
 
-        osm_type_list.append(str(_get("highway", "residential")))
+        h_type = str(_get("highway", "residential"))
+        osm_type_list.append(h_type)
         osm_lanes_list.append(_get("lanes"))
         osm_oneway_list.append(bool(_get("oneway", False)))
+        osm_speed_list.append(_get("maxspeed"))
+        divider_raw = " ".join(
+            str(_get(k, ""))
+            for k in ["divider", "median", "separation", "barrier"]
+            if _get(k, "") not in (None, "")
+        ).lower()
+        has_divider_list.append(int(any(token in divider_raw for token in ["yes", "median", "divider", "barrier", "kerb"])))
 
     def _infer_lanes(raw_lanes, h_type: str) -> int:
         try:
@@ -239,11 +248,38 @@ def enrich_osm(df: pd.DataFrame, graphml_path: Path, signals_path: Optional[Path
         if "primary"  in h: return 2
         return 1
 
+    def _infer_speed_limit_mph(raw_speed, h_type: str) -> float:
+        import re
+
+        text = str(raw_speed or "").lower()
+        nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", text)]
+        if nums:
+            speed = float(np.median(nums))
+            if "km" in text or "kph" in text:
+                speed *= 0.621371
+            return float(np.clip(round(speed / 5.0) * 5.0, 5.0, 70.0))
+
+        # OSM maxspeed 缺失时使用纽约市默认限速规则，而不是训练集统计量。
+        h = str(h_type).lower()
+        if "motorway" in h:
+            return 50.0
+        if "trunk" in h:
+            return 40.0
+        if "primary" in h or "secondary" in h:
+            return 30.0
+        return 25.0
+
     df.loc[valid_mask, "OSM_TYPE"]       = osm_type_list
     df.loc[valid_mask, "OSM_ONEWAY"]     = [int(b) for b in osm_oneway_list]
+    df.loc[valid_mask, "REAL_SPEED_LIMIT"] = [
+        _infer_speed_limit_mph(s, t) for s, t in zip(osm_speed_list, osm_type_list)
+    ]
+    df.loc[valid_mask, "HAS_DIVIDER"] = has_divider_list
     df.loc[valid_mask, "INFERRED_LANES"] = [
         _infer_lanes(l, t) for l, t in zip(osm_lanes_list, osm_type_list)
     ]
+    tagged_speed = sum(str(x or "").strip() != "" for x in osm_speed_list)
+    print(f"  [OSM] maxspeed 标签覆盖 {tagged_speed:,}/{len(osm_speed_list):,} 行；缺失处使用 NYC/道路等级默认限速")
 
     print("  [OSM] 路网特征提取完毕")
     return df
