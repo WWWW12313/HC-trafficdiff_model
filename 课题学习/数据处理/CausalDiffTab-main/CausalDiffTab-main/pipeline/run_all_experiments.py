@@ -92,6 +92,13 @@ def _infer_train_rows(data_dir: Path) -> int:
     return 0
 
 
+def _infer_year_from_dataname(dataname: str) -> int | None:
+    tail = str(dataname).rsplit("_", 1)[-1]
+    if tail.isdigit() and len(tail) == 4:
+        return int(tail)
+    return None
+
+
 def _write_random_impute_indices_file(count: int, train_rows: int, seed: int, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if train_rows <= 0:
@@ -253,6 +260,20 @@ def main():
         raise SystemExit(f"后处理未生成 {physical}，请检查 postprocess_samples")
     shutil.copy2(physical, final_csv)
     print(f"[done] 合成数据: {final_csv}")
+
+    target_year = _infer_year_from_dataname(args.dataname)
+    if target_year is not None:
+        from export_raw_style_synthetic import export_raw_style
+
+        raw_style_csv = syn_dir / f"{args.model}_{args.tier}_raw_style.csv"
+        export_raw_style(
+            input_csv=final_csv,
+            output_csv=raw_style_csv,
+            target_year=target_year,
+            raw_csv=None,
+            seed=args.impute_index_seed,
+        )
+        print(f"[done] 原始+API补全样式数据: {raw_style_csv}")
 
     if args.debug_compare_unconditional and mode == "impute_stage3":
         debug_raw = syn_dir / f"_{args.model}_{args.tier}_unconditional_debug_samples.csv"
