@@ -2,7 +2,7 @@
 训练完成后的 2024→2025 迁移收尾管线：
     1. 运行外部 baseline (CTGAN / TVAE / SMOTE, full tier, source=2024)
     2. 统一评估（2024 域内 + 2025 迁移）
-  3. 输出对比报告到 results/eval_full_compare.md
+        3. 输出对比报告到 results/eval_full_source2024_compare.md
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def main() -> None:
         "",
         "| 模型 | lambda | 因果掩码 | 分层 |",
         "| ---- | ------ | -------- | ---- |",
-        "| macro_soft_2024 | 0.3 | ✅ | ✅ |",
+        "| ours_full_model | 1.0 | ✅ | ✅ |",
         "| ablation_no_causal | 0.0 | ❌ | ✅ |",
         "| ablation_no_hierarchy | 1.0 | ✅ | ❌ |",
         "| baseline_tabddpm | 0.0 | ❌ | ❌ |",
