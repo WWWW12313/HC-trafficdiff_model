@@ -16,6 +16,128 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
+def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: dict) -> np.ndarray:
+    """Apply domain constraints on top of NOTEARS/macro candidate edges.
+
+    NOTEARS captures statistical dependencies. For the crash pipeline, static OSM
+    road attributes are generated from spatial matching and a year-specific road
+    snapshot; crash time should not cause those road attributes.
+    """
+    if W.shape[0] != len(feature_names) or W.shape[1] != len(feature_names):
+        print(
+            f"[causal_rules] skip domain rules: W shape={W.shape}, "
+            f"features={len(feature_names)}"
+        )
+        return W
+
+    W = W.copy()
+    idx = {name: i for i, name in enumerate(feature_names)}
+
+    time_nodes = set(groups.get("stage1_continuous", [])) | set(groups.get("stage1_categorical", []))
+    spatial_nodes = {"LATITUDE", "LONGITUDE"}
+    time_nodes -= spatial_nodes
+    weather_nodes = {"TEMP_C", "prcp", "WIND_SPEED_KMH", "coco", "WEATHER_CONDITION"}
+    road_nodes = {
+        "DIST_TO_SIGNAL_M",
+        "REAL_SPEED_LIMIT",
+        "INFERRED_LANES",
+        "HAS_TRAFFIC_SIGNAL",
+        "OSM_ONEWAY",
+        "HAS_DIVIDER",
+        "OSM_TYPE",
+    }
+    stage3_nodes = set(groups.get("stage3_features", [])) | set(groups.get("stage3_categorical", []))
+    context_nodes = set(groups.get("stage1_features", [])) | set(groups.get("stage2_features", []))
+    vehicle_nodes = set(groups.get("vehicle_binary", []))
+    factor_nodes = set(groups.get("factor_binary", []))
+    injury_nodes = set(groups.get("injury_binary", [])) | {"TOTAL_VEHICLES", "IS_MULTI_VEHICLE"}
+
+    def zero_edges(sources: set[str], targets: set[str]) -> int:
+        n = 0
+        for s in sources:
+            for t in targets:
+                if s in idx and t in idx and W[idx[s], idx[t]] != 0:
+                    W[idx[s], idx[t]] = 0.0
+                    n += 1
+        return n
+
+    def keep_edges(sources: set[str], targets: set[str], weight: float) -> int:
+        n = 0
+        for s in sources:
+            for t in targets:
+                if s in idx and t in idx and s != t:
+                    if W[idx[s], idx[t]] < weight:
+                        W[idx[s], idx[t]] = weight
+                        n += 1
+        return n
+
+    removed = 0
+    removed += zero_edges(time_nodes, road_nodes)
+    removed += zero_edges(weather_nodes, road_nodes)
+    removed += zero_edges(stage3_nodes, context_nodes)
+    removed += zero_edges(factor_nodes | injury_nodes, vehicle_nodes)
+
+    added = 0
+    added += keep_edges(spatial_nodes, road_nodes, 1.0)
+    added += keep_edges(time_nodes, weather_nodes, 1.0)
+    added += keep_edges(weather_nodes | road_nodes, factor_nodes, 0.5)
+    added += keep_edges(time_nodes, factor_nodes, 1.0)
+    added += keep_edges(vehicle_nodes, factor_nodes | {"TOTAL_VEHICLES", "IS_MULTI_VEHICLE"}, 1.0)
+    added += keep_edges(factor_nodes, injury_nodes, 1.0)
+    added += keep_edges(vehicle_nodes, injury_nodes, 0.5)
+    added += keep_edges(weather_nodes | road_nodes, injury_nodes, 0.5)
+
+    np.fill_diagonal(W, 0.0)
+    print(f"[causal_rules] removed={removed}, enforced_or_upweighted={added}")
+    return W
+
+
+def _expand_subset_causal_masks(
+    W_full: np.ndarray,
+    all_features: list[str],
+    num_cols: list[str],
+    cat_cols: list[str],
+    info: dict,
+    output_dir: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Create TabDiff num/cat masks for a subset dataset using full feature W."""
+    os.makedirs(output_dir, exist_ok=True)
+    feature_idx = {name: i for i, name in enumerate(all_features)}
+
+    num_idx = [feature_idx[f] for f in num_cols if f in feature_idx]
+    cat_idx = [feature_idx[f] for f in cat_cols if f in feature_idx]
+
+    d_num_with_y = len(num_cols) + 1
+    num_mask = np.zeros((d_num_with_y, d_num_with_y), dtype=np.float32)
+    if num_idx:
+        num_mask[0, 1:] = 1.0
+        num_mask[1:, 1:] = W_full[np.ix_(num_idx, num_idx)]
+
+    cat_sizes = info["cat_sizes"]
+    expanded = [s + 1 for s in cat_sizes]
+    cat_mask = np.zeros((sum(expanded), sum(expanded)), dtype=np.float32)
+    offsets = []
+    cur = 0
+    for size in expanded:
+        offsets.append(cur)
+        cur += size
+
+    if cat_idx:
+        W_cat = W_full[np.ix_(cat_idx, cat_idx)]
+        for i in range(len(cat_idx)):
+            for j in range(len(cat_idx)):
+                value = float(W_cat[i, j])
+                if value > 0:
+                    oi, oj = offsets[i], offsets[j]
+                    si, sj = expanded[i], expanded[j]
+                    cat_mask[oi:oi + si, oj:oj + sj] = value
+
+    np.save(os.path.join(output_dir, "num_causal_mask.npy"), num_mask)
+    np.save(os.path.join(output_dir, "cat_causal_mask.npy"), cat_mask)
+    print(f"[subset_mask] {output_dir}: num={num_mask.shape}, cat={cat_mask.shape}")
+    return num_mask, cat_mask
+
+
 def _safe_read_csv(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, low_memory=False)
     return df
@@ -292,6 +414,7 @@ def build_causal_mask_for_model(
     info: dict,
     output_dir: str,
     task_type: str = "regression",
+    groups: dict | None = None,
 ):
     """
     将 NOTEARS 产出的 45×45 全局因果矩阵，
@@ -304,6 +427,9 @@ def build_causal_mask_for_model(
     cat_causal_mask: (sum_one_hot_with_mask) × (sum_one_hot_with_mask)
     """
     W = np.load(notears_npy).astype(np.float32)
+    if groups is not None:
+        feature_names = groups["continuous_cols"] + groups["categorical_cols"]
+        W = _apply_domain_causal_rules(W, feature_names, groups)
     n_num = info["n_num_features"]
     n_cat = info["n_cat_features"]
     cat_sizes = info["cat_sizes"]
@@ -378,13 +504,15 @@ def run_prepare(
     input_test_csv: str = None,
     full_dataname: str = "nyc_crash",
     stage1_dataname: str = "nyc_stage1",
+    stage2_dataname: str = "nyc_stage2",
 ):
     """
     主流程:
     1. 读取预处理后的 CSV + column_groups
     2. 创建 Stage 1 (spatial) 数据集
-    3. 创建 Stage 3 (full) 数据集
-    4. 为两个 Stage 分别生成对应维度的因果掩码
+    3. 创建 Stage 2 (context) 数据集
+    4. 创建 Stage 3 (full) 数据集
+    5. 为三个 Stage 分别生成对应维度的因果掩码
     """
     print("=" * 60)
     print("Hierarchical CausalDiffTab - Dataset Preparation")
@@ -423,6 +551,7 @@ def run_prepare(
     all_num = groups["continuous_cols"]
     all_cat = groups["categorical_cols"]
     all_features = all_num + all_cat
+    W_full = _apply_domain_causal_rules(W_full, all_features, groups)
     s1_indices = [all_features.index(f) for f in stage1_num + stage1_cat if f in all_features]
 
     # num part of stage1
@@ -462,6 +591,35 @@ def run_prepare(
     print(f"[stage1] Stage 1 spatiotemporal anchor dataset ready")
 
     # ============================================
+    # Stage 2: Context (Stage1 condition + weather/OSM context)
+    # ============================================
+    stage2_dir = os.path.join(base_output, "data", stage2_dataname)
+    stage2_num = groups["stage1_continuous"] + groups["stage2_continuous"]
+    stage2_cat = groups["stage1_categorical"] + groups["stage2_categorical"]
+    if df_test is not None:
+        stage2_info = build_dataset_dir_from_splits(
+            df, df_test, num_cols=stage2_num, cat_cols=stage2_cat,
+            target_col=target_col, output_dir=stage2_dir,
+            task_type="regression",
+        )
+    else:
+        stage2_info = build_dataset_dir(
+            df, num_cols=stage2_num, cat_cols=stage2_cat,
+            target_col=target_col, output_dir=stage2_dir,
+            task_type="regression", seed=seed,
+        )
+
+    _expand_subset_causal_masks(
+        W_full,
+        all_features,
+        stage2_num,
+        stage2_cat,
+        stage2_info,
+        os.path.join(stage2_dir, "causal_masks"),
+    )
+    print(f"[stage2] Stage 2 trainable context dataset ready")
+
+    # ============================================
     # Stage 3: Full (all features)
     # ============================================
     full_dir = os.path.join(base_output, "data", full_dataname)
@@ -483,7 +641,7 @@ def run_prepare(
     # Stage 3 causal mask: from NOTEARS
     mask_dir = os.path.join(full_dir, "causal_masks")
     build_causal_mask_for_model(
-        notears_npy, full_info, mask_dir, task_type="regression"
+        notears_npy, full_info, mask_dir, task_type="regression", groups=groups
     )
     print(f"[full] Stage 3 full dataset ready")
 
@@ -493,6 +651,7 @@ def run_prepare(
     synthetic_targets = [
         (stage1_dataname, stage1_dataname),
         ("nyc_spatial" if stage1_dataname == "nyc_stage1" else f"nyc_spatial_{full_dataname}", stage1_dataname),
+        (stage2_dataname, stage2_dataname),
         (full_dataname, full_dataname),
     ]
     for syn_name, data_name in synthetic_targets:
@@ -509,6 +668,7 @@ def run_prepare(
     print("\n" + "=" * 60)
     print("Dataset preparation complete!")
     print(f"  Stage 1 (spatiotemporal): {stage1_dir}")
+    print(f"  Stage 2 (context): {stage2_dir}")
     print(f"  Stage 3 (full):    {full_dir}")
     print("=" * 60)
 
@@ -540,6 +700,7 @@ def main():
     parser.add_argument("--input_test_csv", type=str, default=None)
     parser.add_argument("--full_dataname", type=str, default="nyc_crash")
     parser.add_argument("--stage1_dataname", type=str, default="nyc_stage1")
+    parser.add_argument("--stage2_dataname", type=str, default="nyc_stage2")
     parser.add_argument("--seed", type=int, default=42)
 
     args = parser.parse_args()
@@ -552,6 +713,7 @@ def main():
         input_test_csv=args.input_test_csv,
         full_dataname=args.full_dataname,
         stage1_dataname=args.stage1_dataname,
+        stage2_dataname=args.stage2_dataname,
         seed=args.seed,
     )
 

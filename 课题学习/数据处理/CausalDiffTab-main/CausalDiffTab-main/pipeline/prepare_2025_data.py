@@ -442,9 +442,32 @@ def enrich_weather(df: pd.DataFrame, weather_csv_paths: List[Path]) -> pd.DataFr
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Level-B 列（路网 + 天气），用于 fallback 判断
-_LEVEL_B_OSM     = {"DIST_TO_SIGNAL_M", "HAS_TRAFFIC_SIGNAL", "OSM_TYPE", "OSM_ONEWAY", "INFERRED_LANES"}
+_LEVEL_B_OSM     = {
+    "DIST_TO_SIGNAL_M", "HAS_TRAFFIC_SIGNAL", "OSM_TYPE", "OSM_ONEWAY",
+    "REAL_SPEED_LIMIT", "HAS_DIVIDER", "INFERRED_LANES",
+}
 _LEVEL_B_WEATHER = {"TEMP_C", "prcp", "WIND_SPEED_KMH", "coco", "WEATHER_CONDITION"}
 _LEVEL_B_ALL     = _LEVEL_B_OSM | _LEVEL_B_WEATHER
+_OSM_DEFAULTS    = {
+    "DIST_TO_SIGNAL_M": 999.0,
+    "HAS_TRAFFIC_SIGNAL": 0,
+    "OSM_TYPE": "residential",
+    "OSM_ONEWAY": 0,
+    "REAL_SPEED_LIMIT": 25.0,
+    "HAS_DIVIDER": 0,
+    "INFERRED_LANES": 1,
+}
+
+
+def _describe_speed_distribution(df: pd.DataFrame, label: str) -> None:
+    if "REAL_SPEED_LIMIT" not in df.columns or len(df) == 0:
+        return
+    speed = pd.to_numeric(df["REAL_SPEED_LIMIT"], errors="coerce")
+    print(
+        f"  [OSM] {label} REAL_SPEED_LIMIT: "
+        f"nunique={speed.nunique(dropna=True)}, "
+        f"min={speed.min():.1f}, max={speed.max():.1f}"
+    )
 
 
 def build_features(
@@ -570,6 +593,10 @@ def build_features(
     for c in _LEVEL_B_ALL:
         if c in out.columns:
             continue  # 已由真实匹配填充
+        if c in _OSM_DEFAULTS:
+            out[c] = _OSM_DEFAULTS[c]
+            fallback_cols.append(c)
+            continue
         if c not in train_ref.columns:
             continue
         if pd.api.types.is_numeric_dtype(train_ref[c]):
@@ -607,7 +634,9 @@ def build_features(
     out = out.reindex(columns=target_cols)
     for c in target_cols:
         if c not in out.columns or out[c].isna().all():
-            if c in train_ref.columns:
+            if c in _OSM_DEFAULTS:
+                out[c] = _OSM_DEFAULTS[c]
+            elif c in train_ref.columns:
                 if pd.api.types.is_numeric_dtype(train_ref[c]):
                     out[c] = pd.to_numeric(train_ref[c], errors="coerce").median()
                 else:
@@ -615,6 +644,14 @@ def build_features(
                     out[c] = mode.iloc[0] if len(mode) else 0
             else:
                 out[c] = 0
+
+    if "REAL_SPEED_LIMIT" in out.columns:
+        speed = pd.to_numeric(out["REAL_SPEED_LIMIT"], errors="coerce")
+        print(
+            "  [OSM] REAL_SPEED_LIMIT 分布: "
+            f"nunique={speed.nunique(dropna=True)}, "
+            f"min={speed.min():.1f}, max={speed.max():.1f}"
+        )
 
     return out
 
@@ -785,8 +822,13 @@ def main() -> None:
         df_test  = df_out.loc[idx_test].reset_index(drop=True)
 
     if len(df_train) > 0:
+        _describe_speed_distribution(df_train, "train")
         df_train.to_csv(out_dir / "train.csv", index=False)
+        written_train = pd.read_csv(out_dir / "train.csv", usecols=["REAL_SPEED_LIMIT"])
+        _describe_speed_distribution(written_train, "written train")
     df_test.to_csv(out_dir / "test.csv", index=False)
+    written_test = pd.read_csv(out_dir / "test.csv", usecols=["REAL_SPEED_LIMIT"])
+    _describe_speed_distribution(written_test, "written test")
 
     # 同时写一份到 results/，供 evaluate_postcovid_transfer.py 使用
     # 文件名包含年份和实际行数，便于追踪

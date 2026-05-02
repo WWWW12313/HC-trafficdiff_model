@@ -3,7 +3,7 @@ Hierarchical CausalDiffTab - 完整采样器
 ========================================
 支持两种模式:
   1. unconditional: 直接从 Stage 3 模型生成全量特征 (用于评估)
-  2. conditional:   DDPM Inpainting, 锁定 Stage 1/2 条件, 只生成 Stage 3
+    2. conditional:   DDPM Inpainting, 锁定上游条件, 生成 Stage 2 或 Stage 3
 
 Usage:
   # 无条件采样 (评估用)
@@ -237,17 +237,33 @@ def build_stage_indices(info: dict, column_groups: dict) -> Dict[str, List[int]]
     }
 
 
-def build_stage3_impute_masks(info: dict, column_groups: dict):
+def build_stage_impute_masks(info: dict, column_groups: dict, impute_stage: str = "stage3"):
     """
     用于 diffusion.sample_impute：num_mask_idx / cat_mask_idx 为需要 **重新生成** 的维度。
     与 make_dataset(regression) 一致：X_num 第 0 列为目标 y（经 TabDiff 侧 Quantile），
     其余列为 num_col_names 顺序的连续特征。
     """
+    num_col_names = info["num_col_names"]
     cat_col_names = info["cat_col_names"]
-    s3 = set(column_groups.get("stage3_categorical", []))
-    cat_mask_idx = [i for i, c in enumerate(cat_col_names) if c in s3]
-    num_mask_idx = [0]
+
+    if impute_stage == "stage2":
+        target_num = set(column_groups.get("stage2_continuous", []))
+        target_cat = set(column_groups.get("stage2_categorical", []))
+        y_offset = 1 if info.get("task_type", "regression") == "regression" else 0
+        num_mask_idx = [i + y_offset for i, c in enumerate(num_col_names) if c in target_num]
+        cat_mask_idx = [i for i, c in enumerate(cat_col_names) if c in target_cat]
+    elif impute_stage == "stage3":
+        target_cat = set(column_groups.get("stage3_categorical", []))
+        cat_mask_idx = [i for i, c in enumerate(cat_col_names) if c in target_cat]
+        num_mask_idx = [0]
+    else:
+        raise ValueError(f"Unsupported impute_stage={impute_stage!r}")
+
     return num_mask_idx, cat_mask_idx
+
+
+def build_stage3_impute_masks(info: dict, column_groups: dict):
+    return build_stage_impute_masks(info, column_groups, impute_stage="stage3")
 
 
 def _reset_impute_state(diffusion: UnifiedCtimeDiffusion) -> None:
@@ -282,6 +298,39 @@ def sample_impute_stage3(
     以训练集中指定行的 Stage1+2 为条件，仅对目标 y 与 Stage3 分类列做 sample_impute。
     条件行必须与 TabDiffDataset 内部张量一致（已含 TabDiff Quantile + Ordinal 编码）。
     """
+    return sample_impute_by_stage(
+        diffusion,
+        dataset,
+        info,
+        column_groups,
+        train_row_indices,
+        impute_stage="stage3",
+        resample_rounds=resample_rounds,
+        impute_condition=impute_condition,
+        w_num=w_num,
+        w_cat=w_cat,
+    )
+
+
+@torch.no_grad()
+def sample_impute_by_stage(
+    diffusion: UnifiedCtimeDiffusion,
+    dataset: TabDiffDataset,
+    info: dict,
+    column_groups: dict,
+    train_row_indices: List[int],
+    impute_stage: str,
+    resample_rounds: int = 1,
+    impute_condition: str = "x_0",
+    w_num: float = 0.0,
+    w_cat: float = 0.0,
+) -> torch.Tensor:
+    """
+    按 stage 执行 sample_impute。
+
+    stage2: 冻结 Stage1，重采样天气/OSM 上下文。
+    stage3: 冻结 Stage1+2，重采样 y 与 Stage3 分类列。
+    """
     device = diffusion.device
     d_n = dataset.d_numerical
     n = len(dataset)
@@ -290,12 +339,13 @@ def sample_impute_stage3(
     x_num = X[:, :d_n].clone()
     x_cat = X[:, d_n:].long()
 
-    num_mask_idx, cat_mask_idx = build_stage3_impute_masks(info, column_groups)
+    num_mask_idx, cat_mask_idx = build_stage_impute_masks(info, column_groups, impute_stage)
 
     x_train_num = dataset.X[:, :d_n].float()
-    avg_m = x_train_num[:, num_mask_idx].mean(dim=0).to(device)
-    for k, ji in enumerate(num_mask_idx):
-        x_num[:, ji] = avg_m[k]
+    if num_mask_idx:
+        avg_m = x_train_num[:, num_mask_idx].mean(dim=0).to(device)
+        for k, ji in enumerate(num_mask_idx):
+            x_num[:, ji] = avg_m[k]
 
     mi = diffusion.mask_index
     for j in cat_mask_idx:
@@ -400,6 +450,7 @@ def run_sampling(
     road_signals: str = None,
     snap_max_dist_m: float = 300.0,
     recompute_osm_after_snap: bool = True,
+    impute_stage: str = "stage3",
 ):
     """
     完整采样管线:
@@ -411,7 +462,7 @@ def run_sampling(
     data_dir = data_dir or str(CDT_ROOT / "data" / "nyc_crash")
 
     if condition_train_indices:
-        mode_s = "impute_stage3 (train row indices)"
+        mode_s = f"impute_{impute_stage} (train row indices)"
     elif condition_csv is not None:
         mode_s = "condition_csv -> fallback unconditional"
     else:
@@ -434,18 +485,19 @@ def run_sampling(
         if not base_idx:
             raise ValueError("condition_train_indices 解析结果为空")
         expanded = [base_idx[i % len(base_idx)] for i in range(num_samples)]
-        print(f"[impute] Stage3 sample_impute, base indices={base_idx}, total rows={num_samples}, "
+        print(f"[impute] {impute_stage} sample_impute, base indices={base_idx}, total rows={num_samples}, "
               f"batch_size={batch_size}")
         chunks = []
         for start in range(0, num_samples, batch_size):
             end = min(start + batch_size, num_samples)
             sub = expanded[start:end]
-            t_out = sample_impute_stage3(
+            t_out = sample_impute_by_stage(
                 diffusion,
                 dataset,
                 info,
                 groups,
                 sub,
+                impute_stage=impute_stage,
                 resample_rounds=impute_resample_rounds,
                 impute_condition=impute_condition,
             )
@@ -517,6 +569,8 @@ def main():
     )
     parser.add_argument("--impute_resample_rounds", type=int, default=1)
     parser.add_argument("--impute_condition", type=str, default="x_0", choices=["x_0", "x_t"])
+    parser.add_argument("--impute_stage", type=str, default="stage3", choices=["stage2", "stage3"],
+                        help="condition_train_indices 模式下要重采样的层：stage2=天气/OSM，stage3=事故结果")
     parser.add_argument("--num_samples", type=int, default=5000)
     parser.add_argument("--batch_size", type=int, default=500)
     parser.add_argument("--device", type=str, default="cuda:0")
@@ -541,6 +595,7 @@ def main():
         do_postprocess=not args.no_postprocess,
         impute_resample_rounds=args.impute_resample_rounds,
         impute_condition=args.impute_condition,
+        impute_stage=args.impute_stage,
     )
 
 

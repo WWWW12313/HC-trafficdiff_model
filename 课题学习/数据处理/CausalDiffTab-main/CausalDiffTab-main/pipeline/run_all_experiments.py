@@ -124,6 +124,7 @@ def main():
             "ablation_no_causal",
             "ablation_no_hierarchy",
             "ours_full_model",
+            "ours_stage2_causal",
             "macro_soft_2024",
         ],
         help="与 configs/experiments/*.yaml 中 model_name 一致",
@@ -191,6 +192,7 @@ def main():
     lambda_causal = float(cfg.get("lambda_causal", 1.0))
     use_causal_masks = bool(cfg.get("use_causal_masks", True))
     hierarchical = bool(cfg.get("hierarchical", False))
+    train_stage2 = bool(cfg.get("train_stage2", False))
     sampling = cfg.get("sampling") or {}
     mode = sampling.get("mode", "unconditional")
 
@@ -205,6 +207,10 @@ def main():
             _run_train_stage(
                 1, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
             )
+        if train_stage2:
+            _run_train_stage(
+                2, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
+            )
         _run_train_stage(
             3, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
         )
@@ -213,12 +219,19 @@ def main():
         print("[skip_sample] 训练结束，未生成合成 CSV")
         return
 
-    ckpt_dir = CDT_ROOT / "ckpt" / args.dataname / f"stage3_full_{args.tier}_{experiment_id}"
+    if mode == "impute_stage2":
+        stage2_dataname = args.dataname.replace("nyc_crash", "nyc_stage2", 1) if args.dataname.startswith("nyc_crash_") else "nyc_stage2"
+        ckpt_dir = CDT_ROOT / "ckpt" / stage2_dataname / f"stage2_context_{args.tier}_{experiment_id}"
+        data_root = CDT_ROOT / "data" / stage2_dataname
+        impute_stage = "stage2"
+    else:
+        ckpt_dir = CDT_ROOT / "ckpt" / args.dataname / f"stage3_full_{args.tier}_{experiment_id}"
+        data_root = CDT_ROOT / "data" / args.dataname
+        impute_stage = "stage3"
     if not (ckpt_dir / "config.pkl").is_file():
         raise SystemExit(f"缺少 checkpoint 目录或 config.pkl: {ckpt_dir}")
 
     num_samples = _default_num_samples(cfg, args.tier)
-    data_root = CDT_ROOT / "data" / args.dataname
     data_dir = str(data_root)
     raw_out = syn_dir / f"_{args.model}_{args.tier}_samples.csv"
 
@@ -226,14 +239,14 @@ def main():
     from src.sample_conditional import run_sampling
 
     cond_indices = None
-    if mode == "impute_stage3":
+    if mode in {"impute_stage2", "impute_stage3"}:
         n_idx = int(sampling.get("impute_indices_count", num_samples))
         idx_file = CDT_ROOT / "results" / "_cache" / f"impute_base_{args.model}_{args.tier}.txt"
         train_rows = _infer_train_rows(data_root)
         _write_random_impute_indices_file(n_idx, train_rows, args.impute_index_seed, idx_file)
         print(
-            "[note] mode=impute_stage3: Stage1/2 将来自真实训练行条件，"
-            "该设置通常会比 unconditional 显著更容易获得更好指标。"
+            f"[note] mode={mode}: 上游条件仍来自训练行索引；"
+            "该设置用于 inpainting 质量评估，不等同于最终未来闭环生成。"
         )
         print(
             f"[impute] index_file={idx_file}, count={n_idx}, train_rows={train_rows}, seed={args.impute_index_seed}"
@@ -248,21 +261,26 @@ def main():
         batch_size=min(500, num_samples),
         device=args.device,
         output_csv=str(raw_out),
-        do_postprocess=True,
+        do_postprocess=(mode != "impute_stage2"),
         road_graphml=args.road_graphml,
         road_signals=args.road_signals,
         snap_max_dist_m=args.snap_max_dist_m,
         recompute_osm_after_snap=not args.no_recompute_osm,
+        impute_stage=impute_stage,
     )
 
-    physical = raw_out.with_name(raw_out.stem + "_physical" + raw_out.suffix)
-    if not physical.is_file():
-        raise SystemExit(f"后处理未生成 {physical}，请检查 postprocess_samples")
-    shutil.copy2(physical, final_csv)
-    print(f"[done] 合成数据: {final_csv}")
+    if mode == "impute_stage2":
+        shutil.copy2(raw_out, final_csv)
+        print(f"[done] Stage2 context samples: {final_csv}")
+    else:
+        physical = raw_out.with_name(raw_out.stem + "_physical" + raw_out.suffix)
+        if not physical.is_file():
+            raise SystemExit(f"后处理未生成 {physical}，请检查 postprocess_samples")
+        shutil.copy2(physical, final_csv)
+        print(f"[done] 合成数据: {final_csv}")
 
     target_year = _infer_year_from_dataname(args.dataname)
-    if target_year is not None:
+    if target_year is not None and mode != "impute_stage2":
         from export_raw_style_synthetic import export_raw_style
 
         raw_style_csv = syn_dir / f"{args.model}_{args.tier}_raw_style.csv"

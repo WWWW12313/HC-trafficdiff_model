@@ -1,8 +1,9 @@
 """
 Hierarchical CausalDiffTab - 分层训练入口
 ==========================================
-支持两个 Stage 的训练:
+支持三个 Stage 的训练:
   Stage 1: 空间扩散 (LATITUDE, LONGITUDE) - 纯连续模型
+    Stage 2: 上下文扩散 (天气 + OSM/路网) - 条件于 Stage 1 的可训练环境层
   Stage 3: 全特征条件生成 - 以空间 + 离线上下文为条件
 
 三档训练计划:
@@ -12,6 +13,7 @@ Hierarchical CausalDiffTab - 分层训练入口
 
 使用方法:
   python src/train_hierarchical.py --stage 1 --tier quick --device cuda:0
+    python src/train_hierarchical.py --stage 2 --tier quick --device cuda:0
   python src/train_hierarchical.py --stage 3 --tier balanced --device cuda:0
   python src/train_hierarchical.py --stage 3 --tier full --device cuda:0
 """
@@ -119,6 +121,14 @@ def build_config(stage: int, device: str, tier: str = "quick") -> dict:
         raw_config["unimodmlp_params"]["dim_t"] = 256
         raw_config["unimodmlp_params"]["factor"] = 16
         raw_config["unimodmlp_params"]["dropout"] = 0.0
+    elif stage == 2:
+        raw_config["train"]["main"]["lr"] = 0.0015
+        raw_config["train"]["main"]["closs_weight_schedule"] = "anneal"
+        raw_config["unimodmlp_params"]["num_layers"] = 3
+        raw_config["unimodmlp_params"]["d_token"] = 8
+        raw_config["unimodmlp_params"]["dim_t"] = 256
+        raw_config["unimodmlp_params"]["factor"] = 24
+        raw_config["unimodmlp_params"]["dropout"] = 0.1
     else:
         raw_config["train"]["main"]["lr"] = 0.001
         raw_config["train"]["main"]["closs_weight_schedule"] = "anneal"
@@ -434,6 +444,12 @@ def train_stage(
         else:
             dataname = "nyc_stage1"
         exp_name = f"stage1_spatial_{tier}{_exp_suffix}"
+    elif stage == 2:
+        if dataname and dataname.startswith("nyc_crash_"):
+            dataname = dataname.replace("nyc_crash", "nyc_stage2", 1)
+        elif not dataname:
+            dataname = "nyc_stage2"
+        exp_name = f"stage2_context_{tier}{_exp_suffix}"
     else:
         dataname = dataname or "nyc_crash"
         exp_name = f"stage3_full_{tier}{_exp_suffix}"
@@ -623,8 +639,8 @@ def train_stage(
 
 def main():
     parser = argparse.ArgumentParser(description="Hierarchical CausalDiffTab Training")
-    parser.add_argument("--stage", type=int, default=1, choices=[1, 3],
-                        help="Training stage: 1=spatial, 3=full conditional")
+    parser.add_argument("--stage", type=int, default=1, choices=[1, 2, 3],
+                        help="Training stage: 1=spatiotemporal, 2=context, 3=full conditional")
     parser.add_argument("--tier", type=str, default="quick",
                         choices=["quick", "balanced", "full"],
                         help="Training tier: quick(500/10) balanced(2000/200) full(all/4000)")
@@ -658,7 +674,7 @@ def main():
         "--dataname",
         type=str,
         default=None,
-        help="Stage 3 数据目录名（位于 data/ 下），例如 nyc_crash_2024；Stage 1 仍使用 nyc_stage1",
+        help="Stage 3 数据目录名（位于 data/ 下），例如 nyc_crash_2024；Stage 1/2 会映射为 nyc_stage1_2024/nyc_stage2_2024",
     )
     args = parser.parse_args()
 
