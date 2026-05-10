@@ -55,6 +55,27 @@ VEHICLE_CANONICAL_LABEL = {
     "is_emergency": "Ambulance",
 }
 
+WEATHER_COLUMNS = ["TEMP_C", "prcp", "WIND_SPEED_KMH", "coco", "WEATHER_CONDITION"]
+INJURY_BIN_COLUMNS = [
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",
+    "NUMBER_OF_MOTORIST_INJURED_BIN",
+]
+DEFAULT_TARGET_CONDITION_COLS = [
+    "TOTAL_VEHICLES",
+    "IS_MULTI_VEHICLE",
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",
+    "NUMBER_OF_MOTORIST_INJURED_BIN",
+]
+
+
+def _normalize_condition_value(value) -> str:
+    if pd.isna(value):
+        return "__NA__"
+    text = str(value).strip()
+    return text if text else "__NA__"
+
 
 def _hour_to_hhmm(hour_series: pd.Series) -> pd.Series:
     h = pd.to_numeric(hour_series, errors="coerce").fillna(0.0).clip(0.0, 23.999)
@@ -184,6 +205,222 @@ def _apply_semantic_repair(df: pd.DataFrame) -> dict:
     return stats
 
 
+def _causal_weather_resample(
+    df: pd.DataFrame,
+    reference_csv: str,
+    condition_cols: list[str],
+    min_bucket_size: int = 30,
+    seed: int = 42,
+) -> tuple[pd.DataFrame, dict]:
+    """Resample weather jointly from empirical pools conditioned on causal parents."""
+    stats = {
+        "enabled": False,
+        "reference_csv": reference_csv,
+        "condition_cols": condition_cols,
+        "weather_cols": [],
+        "exact": 0,
+        "season_fallback": 0,
+        "global_fallback": 0,
+        "skipped": 0,
+    }
+    if not reference_csv or not os.path.exists(reference_csv):
+        stats["reason"] = "reference_csv_missing"
+        return df, stats
+
+    ref = pd.read_csv(reference_csv, low_memory=False)
+    weather_cols = [c for c in WEATHER_COLUMNS if c in df.columns and c in ref.columns]
+    condition_cols = [c for c in condition_cols if c in df.columns and c in ref.columns]
+    if not weather_cols:
+        stats["reason"] = "weather_cols_missing"
+        return df, stats
+    if not condition_cols:
+        condition_cols = [c for c in ["SEASON"] if c in df.columns and c in ref.columns]
+    if not condition_cols:
+        stats["reason"] = "condition_cols_missing"
+        return df, stats
+
+    ref = ref.dropna(subset=weather_cols, how="all").copy()
+    if len(ref) == 0:
+        stats["reason"] = "empty_reference_weather"
+        return df, stats
+
+    stats["enabled"] = True
+    stats["weather_cols"] = weather_cols
+    rng = np.random.RandomState(seed)
+
+    def key_from_row(row, cols):
+        return tuple(_normalize_condition_value(row[c]) for c in cols)
+
+    exact_pools: dict[tuple[str, ...], np.ndarray] = {}
+    for key, idx in ref.groupby(condition_cols, dropna=False).groups.items():
+        if not isinstance(key, tuple):
+            key = (key,)
+        norm_key = tuple(_normalize_condition_value(v) for v in key)
+        exact_pools[norm_key] = np.asarray(list(idx), dtype=int)
+
+    season_pools: dict[str, np.ndarray] = {}
+    if "SEASON" in ref.columns:
+        for season, idx in ref.groupby("SEASON", dropna=False).groups.items():
+            season_pools[_normalize_condition_value(season)] = np.asarray(list(idx), dtype=int)
+
+    global_pool = ref.index.to_numpy(dtype=int)
+    sampled_indices: list[int] = []
+    for _, row in df.iterrows():
+        key = key_from_row(row, condition_cols)
+        pool = exact_pools.get(key)
+        source = "exact"
+        if pool is None or len(pool) < min_bucket_size:
+            season_value = _normalize_condition_value(row["SEASON"]) if "SEASON" in df.columns else "__NA__"
+            pool = season_pools.get(season_value)
+            source = "season_fallback"
+        if pool is None or len(pool) == 0:
+            pool = global_pool
+            source = "global_fallback"
+        if pool is None or len(pool) == 0:
+            sampled_indices.append(-1)
+            stats["skipped"] += 1
+            continue
+        sampled_indices.append(int(pool[rng.randint(0, len(pool))]))
+        stats[source] += 1
+
+    out = df.copy()
+    valid_pos = [i for i, idx in enumerate(sampled_indices) if idx >= 0]
+    if valid_pos:
+        picked_ref_idx = [sampled_indices[i] for i in valid_pos]
+        sampled_weather = ref.loc[picked_ref_idx, weather_cols].reset_index(drop=True)
+        out.loc[out.index[valid_pos], weather_cols] = sampled_weather.to_numpy()
+
+    for col in ["TEMP_C", "prcp", "WIND_SPEED_KMH"]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+    if "TEMP_C" in out.columns:
+        out["TEMP_C"] = out["TEMP_C"].clip(-30, 45).round(1)
+    if "prcp" in out.columns:
+        out["prcp"] = out["prcp"].clip(0, 200).round(3)
+        out.loc[out["prcp"].abs() < 1e-3, "prcp"] = 0.0
+    if "WIND_SPEED_KMH" in out.columns:
+        out["WIND_SPEED_KMH"] = out["WIND_SPEED_KMH"].clip(0, 150)
+
+    return out, stats
+
+
+def _injury_lower_bound(df: pd.DataFrame) -> pd.Series:
+    present = [c for c in INJURY_BIN_COLUMNS if c in df.columns]
+    if not present:
+        return pd.Series(0, index=df.index, dtype=int)
+    flags = pd.DataFrame(index=df.index)
+    for col in present:
+        flags[col] = (pd.to_numeric(df[col], errors="coerce").fillna(0) > 0.5).astype(int)
+    return flags.sum(axis=1).clip(lower=0).astype(int)
+
+
+def _causal_target_resample(
+    df: pd.DataFrame,
+    reference_csv: str,
+    target_col: str,
+    condition_cols: list[str],
+    min_bucket_size: int = 30,
+    seed: int = 42,
+    enforce_injury_lower_bound: bool = True,
+) -> tuple[pd.DataFrame, dict]:
+    """Resample target from source-domain empirical conditional count distribution."""
+    stats = {
+        "enabled": False,
+        "reference_csv": reference_csv,
+        "target_col": target_col,
+        "condition_cols": condition_cols,
+        "exact": 0,
+        "core_fallback": 0,
+        "global_fallback": 0,
+        "lower_bound_updates": 0,
+        "skipped": 0,
+    }
+    if target_col not in df.columns:
+        stats["reason"] = "target_missing_in_synthetic"
+        return df, stats
+    if not reference_csv or not os.path.exists(reference_csv):
+        stats["reason"] = "reference_csv_missing"
+        return df, stats
+
+    ref = pd.read_csv(reference_csv, low_memory=False)
+    if target_col not in ref.columns:
+        stats["reason"] = "target_missing_in_reference"
+        return df, stats
+
+    condition_cols = [c for c in condition_cols if c in df.columns and c in ref.columns]
+    core_cols = [c for c in ["TOTAL_VEHICLES", "IS_MULTI_VEHICLE"] if c in df.columns and c in ref.columns]
+    if not condition_cols:
+        condition_cols = core_cols
+    if not condition_cols:
+        stats["reason"] = "condition_cols_missing"
+        return df, stats
+
+    ref = ref.copy()
+    ref[target_col] = pd.to_numeric(ref[target_col], errors="coerce")
+    ref = ref.dropna(subset=[target_col])
+    if len(ref) == 0:
+        stats["reason"] = "empty_reference_target"
+        return df, stats
+
+    stats["enabled"] = True
+    rng = np.random.RandomState(seed)
+
+    def key_from_row(row, cols):
+        return tuple(_normalize_condition_value(row[c]) for c in cols)
+
+    exact_pools: dict[tuple[str, ...], np.ndarray] = {}
+    for key, idx in ref.groupby(condition_cols, dropna=False).groups.items():
+        if not isinstance(key, tuple):
+            key = (key,)
+        norm_key = tuple(_normalize_condition_value(v) for v in key)
+        exact_pools[norm_key] = np.asarray(list(idx), dtype=int)
+
+    core_pools: dict[tuple[str, ...], np.ndarray] = {}
+    if core_cols:
+        for key, idx in ref.groupby(core_cols, dropna=False).groups.items():
+            if not isinstance(key, tuple):
+                key = (key,)
+            norm_key = tuple(_normalize_condition_value(v) for v in key)
+            core_pools[norm_key] = np.asarray(list(idx), dtype=int)
+
+    global_pool = ref.index.to_numpy(dtype=int)
+    sampled_values: list[float] = []
+    for _, row in df.iterrows():
+        key = key_from_row(row, condition_cols)
+        pool = exact_pools.get(key)
+        source = "exact"
+        if pool is None or len(pool) < min_bucket_size:
+            core_key = key_from_row(row, core_cols) if core_cols else tuple()
+            pool = core_pools.get(core_key)
+            source = "core_fallback"
+        if pool is None or len(pool) == 0:
+            pool = global_pool
+            source = "global_fallback"
+        if pool is None or len(pool) == 0:
+            sampled_values.append(np.nan)
+            stats["skipped"] += 1
+            continue
+        sampled_idx = int(pool[rng.randint(0, len(pool))])
+        sampled_values.append(float(ref.loc[sampled_idx, target_col]))
+        stats[source] += 1
+
+    out = df.copy()
+    sampled = pd.Series(sampled_values, index=out.index)
+    repaired = pd.to_numeric(sampled, errors="coerce").fillna(
+        pd.to_numeric(out[target_col], errors="coerce")
+    )
+    repaired = repaired.clip(lower=0).round().astype(int)
+
+    if enforce_injury_lower_bound:
+        lower_bound = _injury_lower_bound(out)
+        before = repaired.copy()
+        repaired = np.maximum(repaired, lower_bound).astype(int)
+        stats["lower_bound_updates"] = int((before != repaired).sum())
+
+    out[target_col] = repaired
+    return out, stats
+
+
 def _find_reference_raw_csv(explicit_path: str | None = None) -> str | None:
     if explicit_path and os.path.exists(explicit_path):
         return explicit_path
@@ -218,14 +455,21 @@ def _export_raw_aligned(df: pd.DataFrame, output_csv: str, reference_raw_csv: st
     return out
 
 
-def load_category_mappings(processed_csv: str, cat_cols: list) -> dict:
+def load_category_mappings(processed_csv: str, cat_cols: list, info: Optional[dict] = None) -> dict:
     """
     从 processed_hierarchical.csv 重建 cat.codes → 原始标签 的映射。
     pd.Categorical 默认按字母/数值序排列, codes 从 0 开始。
     """
-    df = pd.read_csv(processed_csv, usecols=cat_cols, low_memory=False)
     mappings = {}
+    info_mappings = (info or {}).get("cat_label_mappings", {})
     for col in cat_cols:
+        if col in info_mappings:
+            mappings[col] = {int(k): v for k, v in info_mappings[col].items()}
+
+    df = pd.read_csv(processed_csv, usecols=cat_cols, low_memory=False)
+    for col in cat_cols:
+        if col in mappings:
+            continue
         cat_series = df[col].astype("category")
         categories = cat_series.cat.categories.tolist()
         mappings[col] = {i: v for i, v in enumerate(categories)}
@@ -261,6 +505,16 @@ def postprocess(
     road_snap_cache: Optional[str] = None,
     use_candidate_snap: bool = False,
     semantic_repair: bool = False,
+    causal_weather_resample: bool = False,
+    weather_reference_csv: Optional[str] = None,
+    weather_condition_cols: Optional[list[str]] = None,
+    weather_min_bucket_size: int = 30,
+    weather_resample_seed: int = 42,
+    causal_target_resample: bool = False,
+    target_reference_csv: Optional[str] = None,
+    target_condition_cols: Optional[list[str]] = None,
+    target_min_bucket_size: int = 30,
+    target_resample_seed: int = 42,
 ):
     """
     完整后处理管线:
@@ -332,7 +586,7 @@ def postprocess(
     # ========================================
     cat_in_syn = [c for c in cat_cols if c in syn.columns]
     if cat_in_syn:
-        mappings = load_category_mappings(processed_csv, cat_in_syn)
+        mappings = load_category_mappings(processed_csv, cat_in_syn, info=info)
         decoded_count = 0
         for col in cat_in_syn:
             if col in mappings:
@@ -462,91 +716,27 @@ def postprocess(
 
             # 重算 OSM 特征列（只对 snap 更新的行）
             if recompute_osm_after_snap and n_snapped > 0:
-                osm_cols = ["DIST_TO_SIGNAL_M", "HAS_TRAFFIC_SIGNAL", "OSM_TYPE", "OSM_ONEWAY", "INFERRED_LANES"]
+                osm_cols = [
+                    "DIST_TO_SIGNAL_M", "HAS_TRAFFIC_SIGNAL", "OSM_TYPE", "OSM_ONEWAY",
+                    "INFERRED_LANES", "REAL_SPEED_LIMIT", "HAS_DIVIDER",
+                ]
                 present_osm = [c for c in osm_cols if c in syn.columns]
                 if present_osm:
-                    import geopandas as gpd
-                    from sklearn.neighbors import BallTree
+                    from src.road_snap import enrich_road_context
 
-                    s_lats = snap_lats[within_valid]
-                    s_lons = snap_lons[within_valid]
-
-                    # 信号灯距离重算
                     _road_signals = road_signals or str(CDT_ROOT / "raw_data" / "osm" / "nyc_traffic_signals.geojson")
-                    sig_loaded = False
-                    if os.path.exists(_road_signals):
-                        try:
-                            sig_gdf = gpd.read_file(_road_signals).to_crs("EPSG:32618")
-                            sig_coords = np.column_stack([
-                                np.asarray(sig_gdf.geometry.x, dtype=float),
-                                np.asarray(sig_gdf.geometry.y, dtype=float),
-                            ])
-                            sig_loaded = True
-                        except Exception:
-                            pass
-                    if not sig_loaded:
-                        sig_xy = []
-                        for _, attrs in G_proj.nodes(data=True):
-                            tags = attrs.get("tags", {})
-                            hw = tags.get("highway", "") if isinstance(tags, dict) else str(tags)
-                            if "traffic_signals" in str(hw):
-                                try:
-                                    sig_xy.append((float(attrs["x"]), float(attrs["y"])))
-                                except (KeyError, ValueError):
-                                    pass
-                        if sig_xy:
-                            sig_coords = np.array(sig_xy)
-                            sig_loaded = True
-
-                    if sig_loaded and "DIST_TO_SIGNAL_M" in syn.columns:
-                        snap_gdf = gpd.GeoDataFrame(
-                            {"snap_lat": s_lats, "snap_lon": s_lons},
-                            geometry=gpd.points_from_xy(s_lons, s_lats),
-                            crs="EPSG:4326",
-                        ).to_crs("EPSG:32618")
-                        pt_coords = np.column_stack([
-                            np.asarray(snap_gdf.geometry.x),
-                            np.asarray(snap_gdf.geometry.y),
-                        ])
-                        tree = BallTree(sig_coords, leaf_size=15)
-                        dists, _ = tree.query(pt_coords, k=1)
-                        syn.loc[snap_idx, "DIST_TO_SIGNAL_M"] = dists[:, 0]
-                        if "HAS_TRAFFIC_SIGNAL" in syn.columns:
-                            syn.loc[snap_idx, "HAS_TRAFFIC_SIGNAL"] = (dists[:, 0] < 30).astype(int)
-
-                    # OSM 道路属性重算（直接复用 snap 时已知的最近边）
-                    if any(c in syn.columns for c in ["OSM_TYPE", "OSM_ONEWAY", "INFERRED_LANES"]):
-                        re_ne = ox.nearest_edges(G, X=s_lons, Y=s_lats)
-                        osm_types, osm_lanes, osm_oneways = [], [], []
-                        for u2, v2, k2 in re_ne:
-                            ed = G.get_edge_data(u2, v2, k2) or {}
-                            def _get(key, default=None):
-                                val = ed.get(key, default)
-                                return val[0] if isinstance(val, list) else val
-                            osm_types.append(str(_get("highway", "residential")))
-                            osm_lanes.append(_get("lanes"))
-                            osm_oneways.append(bool(_get("oneway", False)))
-
-                        def _infer_lanes(raw_lanes, h_type: str) -> int:
-                            try:
-                                return int(float(str(raw_lanes)))
-                            except (ValueError, TypeError):
-                                pass
-                            h = str(h_type).lower()
-                            if "motorway" in h: return 3
-                            if "trunk" in h: return 3
-                            if "primary" in h: return 2
-                            return 1
-
-                        if "OSM_TYPE" in syn.columns:
-                            syn.loc[snap_idx, "OSM_TYPE"] = osm_types
-                        if "OSM_ONEWAY" in syn.columns:
-                            syn.loc[snap_idx, "OSM_ONEWAY"] = [int(b) for b in osm_oneways]
-                        if "INFERRED_LANES" in syn.columns:
-                            syn.loc[snap_idx, "INFERRED_LANES"] = [
-                                _infer_lanes(l, t) for l, t in zip(osm_lanes, osm_types)
-                            ]
-                    print(f"  [road_snap] OSM 特征重算完成（{len(present_osm)} 列）")
+                    enriched_snap = enrich_road_context(
+                        syn.loc[snap_idx].copy(),
+                        graphml_path=_road_graphml,
+                        signals_path=_road_signals,
+                        columns=present_osm,
+                        overwrite=True,
+                        verbose=False,
+                    )
+                    for col in present_osm:
+                        if col in enriched_snap.columns:
+                            syn.loc[snap_idx, col] = enriched_snap[col].values
+                    print(f"  [road_snap] OSM 特征重算完成（{len(present_osm)} 列，统一 road_context 口径）")
 
         except ImportError as e:
             print(f"[road_snap] 依赖缺失，跳过: {e}")
@@ -589,6 +779,32 @@ def postprocess(
             errors="coerce",
         )
         syn["CRASH_FULL_TIME"] = dt.dt.strftime("%Y-%m-%d %H:%M:%S").fillna("")
+
+    if causal_weather_resample:
+        weather_ref = weather_reference_csv or processed_csv
+        cond_cols = weather_condition_cols or ["SEASON", "TIME_PERIOD"]
+        syn, weather_stats = _causal_weather_resample(
+            syn,
+            reference_csv=weather_ref,
+            condition_cols=cond_cols,
+            min_bucket_size=weather_min_bucket_size,
+            seed=weather_resample_seed,
+        )
+        print(f"  [causal_weather_resample] {weather_stats}")
+
+    if causal_target_resample:
+        target_ref = target_reference_csv or processed_csv
+        cond_cols = target_condition_cols or DEFAULT_TARGET_CONDITION_COLS
+        syn, target_stats = _causal_target_resample(
+            syn,
+            reference_csv=target_ref,
+            target_col=target_col,
+            condition_cols=cond_cols,
+            min_bucket_size=target_min_bucket_size,
+            seed=target_resample_seed,
+            enforce_injury_lower_bound=True,
+        )
+        print(f"  [causal_target_resample] {target_stats}")
 
     n_vehicle = _restore_vehicle_type_codes(syn)
     if "BOROUGH" not in syn.columns:
@@ -705,7 +921,33 @@ def main():
                         help="使用预构建候选点集做 snap（更快，适合批量生成）")
     parser.add_argument("--semantic_repair", action="store_true",
                         help="启用采样后弱语义一致性修复（车辆类型/TOTAL_VEHICLES/IS_MULTI_VEHICLE）")
+    parser.add_argument("--causal_weather_resample", action="store_true",
+                        help="按因果上游变量经验重采样天气列（默认 SEASON,TIME_PERIOD）")
+    parser.add_argument("--weather_reference_csv", type=str, default=None,
+                        help="天气经验池 CSV；迁移评估可传 data/nyc_crash_2025/test.csv，默认用 processed_csv")
+    parser.add_argument("--weather_condition_cols", type=str, default="SEASON,TIME_PERIOD",
+                        help="天气重采样条件列，逗号分隔，例如 SEASON,TIME_PERIOD")
+    parser.add_argument("--weather_min_bucket_size", type=int, default=30,
+                        help="条件桶最小样本数；不足则回退到 SEASON，再全局")
+    parser.add_argument("--weather_resample_seed", type=int, default=42)
+    parser.add_argument("--causal_target_resample", action="store_true",
+                        help="按 Stage3 微观变量从源域经验分布重采样 NUMBER OF PERSONS INJURED")
+    parser.add_argument("--target_reference_csv", type=str, default=None,
+                        help="目标经验池 CSV；默认用 processed_csv。迁移评估不要传 2025 test，避免标签泄漏")
+    parser.add_argument("--target_condition_cols", type=str,
+                        default=",".join(DEFAULT_TARGET_CONDITION_COLS),
+                        help="目标重采样条件列，逗号分隔")
+    parser.add_argument("--target_min_bucket_size", type=int, default=30,
+                        help="目标条件桶最小样本数；不足则回退到 TOTAL_VEHICLES/IS_MULTI_VEHICLE，再全局")
+    parser.add_argument("--target_resample_seed", type=int, default=42)
     args = parser.parse_args()
+
+    weather_condition_cols = [
+        c.strip() for c in args.weather_condition_cols.split(",") if c.strip()
+    ]
+    target_condition_cols = [
+        c.strip() for c in args.target_condition_cols.split(",") if c.strip()
+    ]
 
     postprocess(
         samples_csv=args.samples_csv,
@@ -725,6 +967,16 @@ def main():
         road_snap_cache=args.road_snap_cache,
         use_candidate_snap=args.use_candidate_snap,
         semantic_repair=args.semantic_repair,
+        causal_weather_resample=args.causal_weather_resample,
+        weather_reference_csv=args.weather_reference_csv,
+        weather_condition_cols=weather_condition_cols,
+        weather_min_bucket_size=args.weather_min_bucket_size,
+        weather_resample_seed=args.weather_resample_seed,
+        causal_target_resample=args.causal_target_resample,
+        target_reference_csv=args.target_reference_csv,
+        target_condition_cols=target_condition_cols,
+        target_min_bucket_size=args.target_min_bucket_size,
+        target_resample_seed=args.target_resample_seed,
     )
 
 

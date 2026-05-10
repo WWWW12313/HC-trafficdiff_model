@@ -25,6 +25,7 @@ import sys
 import json
 import pickle
 import argparse
+import re
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -39,7 +40,13 @@ sys.path.insert(0, str(CDT_ROOT))
 import src as cdt_src
 from tabdiff.modules.main_modules import UniModMLP, Model
 from tabdiff.models.unified_ctime_diffusion import UnifiedCtimeDiffusion
-from utils_train import TabDiffDataset
+from utils_train import TabDiffDataset, make_dataset
+
+
+RETIRED_CONTEXT_COLUMNS = set()
+DETERMINISTIC_OSM_NUMERIC = {"DIST_TO_SIGNAL_M", "REAL_SPEED_LIMIT", "INFERRED_LANES"}
+DETERMINISTIC_OSM_CATEGORICAL = {"HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY", "OSM_TYPE", "HAS_DIVIDER"}
+H3_ROADCELL_COLUMN = "ROAD_H3_CELL"
 
 
 # ============================================================
@@ -124,6 +131,35 @@ def load_model(
           f"categories={list(categories)[:5]}... ({len(categories)} total)")
 
     return diffusion, dataset, info
+
+
+def load_forward_dataset(
+    ckpt_dir: str,
+    data_dir: str,
+    info: dict,
+):
+    """加载保留正向 transforms 的数据对象，用于把上游生成结果重新编码到下游张量空间。"""
+    config_path = os.path.join(ckpt_dir, "config.pkl")
+    with open(config_path, "rb") as f:
+        raw_config = pickle.load(f)
+
+    return make_dataset(
+        data_path=data_dir,
+        T=cdt_src.Transformations(
+            normalization="quantile",
+            num_nan_policy="mean",
+            cat_nan_policy=None,
+            cat_min_frequency=None,
+            cat_encoding=None,
+            y_policy="default",
+            dequant_dist=raw_config["data"]["dequant_dist"],
+            int_dequant_factor=raw_config["data"]["int_dequant_factor"],
+        ),
+        task_type=info["task_type"],
+        change_val=False,
+        concat=True,
+        y_only=False,
+    )
 
 
 # ============================================================
@@ -237,7 +273,12 @@ def build_stage_indices(info: dict, column_groups: dict) -> Dict[str, List[int]]
     }
 
 
-def build_stage_impute_masks(info: dict, column_groups: dict, impute_stage: str = "stage3"):
+def build_stage_impute_masks(
+    info: dict,
+    column_groups: dict,
+    impute_stage: str = "stage3",
+    free_target: bool = False,
+):
     """
     用于 diffusion.sample_impute：num_mask_idx / cat_mask_idx 为需要 **重新生成** 的维度。
     与 make_dataset(regression) 一致：X_num 第 0 列为目标 y（经 TabDiff 侧 Quantile），
@@ -251,6 +292,8 @@ def build_stage_impute_masks(info: dict, column_groups: dict, impute_stage: str 
         target_cat = set(column_groups.get("stage2_categorical", []))
         y_offset = 1 if info.get("task_type", "regression") == "regression" else 0
         num_mask_idx = [i + y_offset for i, c in enumerate(num_col_names) if c in target_num]
+        if free_target and y_offset:
+            num_mask_idx = [0] + num_mask_idx
         cat_mask_idx = [i for i, c in enumerate(cat_col_names) if c in target_cat]
     elif impute_stage == "stage3":
         target_cat = set(column_groups.get("stage3_categorical", []))
@@ -260,6 +303,667 @@ def build_stage_impute_masks(info: dict, column_groups: dict, impute_stage: str 
         raise ValueError(f"Unsupported impute_stage={impute_stage!r}")
 
     return num_mask_idx, cat_mask_idx
+
+
+def _freeze_impute_columns(
+    num_mask_idx: List[int],
+    cat_mask_idx: List[int],
+    info: dict,
+    frozen_num: set[str],
+    frozen_cat: set[str],
+) -> tuple[List[int], List[int]]:
+    y_offset = 1 if info.get("task_type", "regression") == "regression" else 0
+    frozen_num_idx = {
+        i + y_offset for i, col in enumerate(info["num_col_names"]) if col in frozen_num
+    }
+    frozen_cat_idx = {
+        i for i, col in enumerate(info["cat_col_names"]) if col in frozen_cat
+    }
+    return (
+        [idx for idx in num_mask_idx if idx not in frozen_num_idx],
+        [idx for idx in cat_mask_idx if idx not in frozen_cat_idx],
+    )
+
+
+def _infer_data_year(*paths: str) -> Optional[str]:
+    for path in paths:
+        if not path:
+            continue
+        match = re.search(r"20\d{2}", str(path))
+        if match:
+            return match.group(0)
+    return None
+
+
+def _resolve_osm_resource(user_path: Optional[str], year: Optional[str], filename: str) -> Optional[str]:
+    if user_path and os.path.exists(user_path):
+        return user_path
+    candidates = []
+    if year:
+        candidates.append(CDT_ROOT / "raw_data" / "osm" / year / filename)
+    candidates.append(CDT_ROOT / "raw_data" / "osm" / filename)
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return str(candidates[0]) if candidates else None
+
+
+def _compat_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in ("yes", "true", "1", "on")
+
+
+def _edge_value(edge_data: dict, key: str, default=None):
+    value = edge_data.get(key, default)
+    return value[0] if isinstance(value, list) else value
+
+
+def _infer_lanes(raw_lanes, highway_type: str) -> int:
+    try:
+        return int(float(str(raw_lanes)))
+    except (ValueError, TypeError):
+        pass
+    highway = str(highway_type).lower()
+    if "motorway" in highway or "trunk" in highway:
+        return 3
+    if "primary" in highway:
+        return 2
+    return 1
+
+
+def _infer_speed_limit_mph(raw_speed, highway_type: str) -> float:
+    text = str(raw_speed or "").lower()
+    values = [float(value) for value in re.findall(r"\d+(?:\.\d+)?", text)]
+    if values:
+        speed = float(np.median(values))
+        if "km" in text or "kph" in text:
+            speed *= 0.621371
+        return float(np.clip(round(speed / 5.0) * 5.0, 5.0, 70.0))
+
+    highway = str(highway_type).lower()
+    if "motorway" in highway:
+        return 50.0
+    if "trunk" in highway:
+        return 40.0
+    if "primary" in highway or "secondary" in highway:
+        return 30.0
+    return 25.0
+
+
+def enrich_with_osm_context(
+    df: pd.DataFrame,
+    info: dict,
+    stage_data_dir: str,
+    road_graphml: Optional[str] = None,
+    road_signals: Optional[str] = None,
+) -> pd.DataFrame:
+    """Fill deterministic OSM context from generated LATITUDE/LONGITUDE."""
+    required_num = DETERMINISTIC_OSM_NUMERIC & set(info.get("num_col_names", []))
+    required_cat = DETERMINISTIC_OSM_CATEGORICAL & set(info.get("cat_col_names", []))
+    if not required_num and not required_cat:
+        return df
+    if "LATITUDE" not in df.columns or "LONGITUDE" not in df.columns:
+        print("[osm_context] LATITUDE/LONGITUDE missing; skip deterministic OSM lookup")
+        return df
+
+    year = _infer_data_year(stage_data_dir)
+    graph_path = _resolve_osm_resource(road_graphml, year, "nyc_drive_graph.graphml")
+    if not graph_path or not os.path.exists(graph_path):
+        print(f"[osm_context] graphml missing; skip deterministic OSM lookup: {graph_path}")
+        return df
+    signal_path = _resolve_osm_resource(road_signals, year, "nyc_traffic_signals.geojson")
+    try:
+        from src.road_snap import enrich_road_context
+
+        return enrich_road_context(
+            df,
+            graphml_path=graph_path,
+            signals_path=signal_path,
+            columns=required_num | required_cat,
+            overwrite=True,
+            verbose=True,
+        )
+    except ImportError as exc:
+        print(f"[osm_context] dependency missing; skip deterministic OSM lookup: {exc}")
+    except Exception as exc:
+        print(f"[osm_context] deterministic OSM lookup failed; keep generated defaults: {exc}")
+    return df
+
+
+def _support_key_value(value) -> str:
+    if pd.isna(value):
+        return "__NA__"
+    if isinstance(value, (np.integer, int)):
+        return str(int(value))
+    if isinstance(value, (np.floating, float)):
+        if np.isnan(value):
+            return "__NA__"
+        if float(value).is_integer():
+            return str(int(value))
+    return str(value).strip().lower()
+
+
+def _support_label_value(value, col_name: str, label_mappings: dict) -> str:
+    raw = _support_key_value(value)
+    mapping = label_mappings.get(col_name, {})
+    mapped = mapping.get(raw, mapping.get(str(value), value))
+    return _support_key_value(mapped)
+
+
+def repair_stage1_spatial_support(
+    stage1_df: pd.DataFrame,
+    reference_csv: str,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Project generated Stage1 coordinates onto empirical crash-road support.
+
+    Continuous latitude/longitude samples can match marginal ranges while landing
+    away from the intersection lattice where real crashes occur. This repair keeps
+    generated time/season anchors and samples a real crash coordinate from the
+    matching temporal bucket before deterministic OSM lookup.
+    """
+    required = {"LATITUDE", "LONGITUDE"}
+    key_cols = ["SEASON", "DAY_OF_WEEK", "TIME_PERIOD"]
+    if not required.issubset(stage1_df.columns) or not os.path.exists(reference_csv):
+        return stage1_df
+
+    usecols = ["LATITUDE", "LONGITUDE"] + [col for col in key_cols if col in stage1_df.columns]
+    try:
+        ref = pd.read_csv(reference_csv, usecols=usecols, low_memory=False)
+    except Exception as exc:
+        print(f"[stage1_support] failed to load reference coordinates; keep generated coords: {exc}")
+        return stage1_df
+
+    ref = ref.dropna(subset=["LATITUDE", "LONGITUDE"]).reset_index(drop=True)
+    if len(ref) == 0:
+        return stage1_df
+
+    out = stage1_df.copy()
+    rng = np.random.default_rng(seed)
+    active_keys = [col for col in key_cols if col in out.columns and col in ref.columns]
+    label_mappings: dict = {}
+    info_path = os.path.join(os.path.dirname(reference_csv), "info.json")
+    if os.path.exists(info_path):
+        try:
+            with open(info_path, "r", encoding="utf-8") as f:
+                label_mappings = json.load(f).get("cat_label_mappings", {})
+        except Exception as exc:
+            print(f"[stage1_support] failed to load category label mappings: {exc}")
+
+    def build_groups(cols: list[str]) -> dict[tuple[str, ...], np.ndarray]:
+        if not cols:
+            return {(): ref.index.to_numpy(dtype=int)}
+        keys = ref[cols].apply(lambda row: tuple(_support_label_value(row[col], col, label_mappings) for col in cols), axis=1)
+        return {key: idx.to_numpy(dtype=int) for key, idx in keys.groupby(keys).groups.items()}
+
+    groups_exact = build_groups(active_keys)
+    groups_coarse = build_groups([col for col in ["SEASON", "TIME_PERIOD"] if col in active_keys])
+    all_indices = ref.index.to_numpy(dtype=int)
+
+    chosen: list[int] = []
+    exact_hits = 0
+    coarse_hits = 0
+    for _, row in out.iterrows():
+        exact_key = tuple(_support_label_value(row[col], col, label_mappings) for col in active_keys)
+        candidates = groups_exact.get(exact_key)
+        if candidates is not None and len(candidates) > 0:
+            exact_hits += 1
+        else:
+            coarse_cols = [col for col in ["SEASON", "TIME_PERIOD"] if col in active_keys]
+            coarse_key = tuple(_support_label_value(row[col], col, label_mappings) for col in coarse_cols)
+            candidates = groups_coarse.get(coarse_key)
+            if candidates is not None and len(candidates) > 0:
+                coarse_hits += 1
+            else:
+                candidates = all_indices
+        chosen.append(int(rng.choice(candidates)))
+
+    sampled = ref.iloc[chosen].reset_index(drop=True)
+    before_lat = pd.to_numeric(out["LATITUDE"], errors="coerce").to_numpy(dtype=float)
+    before_lon = pd.to_numeric(out["LONGITUDE"], errors="coerce").to_numpy(dtype=float)
+    out["LATITUDE"] = sampled["LATITUDE"].to_numpy(dtype=float)
+    out["LONGITUDE"] = sampled["LONGITUDE"].to_numpy(dtype=float)
+    moved_m = np.sqrt((before_lat - out["LATITUDE"].to_numpy(dtype=float)) ** 2 + (before_lon - out["LONGITUDE"].to_numpy(dtype=float)) ** 2) * 111_000.0
+    print(
+        "[stage1_support] repaired LATITUDE/LONGITUDE with empirical crash-road anchors: "
+        f"exact={exact_hits}/{len(out)}, coarse={coarse_hits}/{len(out)}, "
+        f"mean_move={float(np.nanmean(moved_m)):.1f}m"
+    )
+    return out
+
+
+def repair_stage1_h3_roadcell_support(
+    stage1_df: pd.DataFrame,
+    reference_csv: str,
+    resolution: int = 8,
+    max_ring: int = 2,
+    min_bucket_size: int = 20,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Decode generated ROAD_H3_CELL to empirical crash-road anchors."""
+    if H3_ROADCELL_COLUMN not in stage1_df.columns or not os.path.exists(reference_csv):
+        return repair_stage1_spatial_support(stage1_df, reference_csv=reference_csv, seed=seed)
+    try:
+        import h3
+    except ImportError as exc:
+        print(f"[h3_roadcell] h3 missing; fallback to empirical spatial repair: {exc}")
+        return repair_stage1_spatial_support(stage1_df, reference_csv=reference_csv, seed=seed)
+
+    key_cols = ["SEASON", "TIME_PERIOD"]
+    usecols = ["LATITUDE", "LONGITUDE", H3_ROADCELL_COLUMN] + [c for c in key_cols if c in stage1_df.columns]
+    try:
+        ref = pd.read_csv(reference_csv, usecols=lambda c: c in set(usecols), low_memory=False)
+    except Exception as exc:
+        print(f"[h3_roadcell] failed to load reference anchors; fallback: {exc}")
+        return repair_stage1_spatial_support(stage1_df, reference_csv=reference_csv, seed=seed)
+
+    ref = ref.dropna(subset=["LATITUDE", "LONGITUDE"]).reset_index(drop=True)
+    if len(ref) == 0:
+        return stage1_df
+    if H3_ROADCELL_COLUMN not in ref.columns:
+        ref[H3_ROADCELL_COLUMN] = [
+            h3.latlng_to_cell(float(lat), float(lon), resolution)
+            for lat, lon in zip(ref["LATITUDE"], ref["LONGITUDE"])
+        ]
+
+    out = stage1_df.copy()
+    rng = np.random.default_rng(seed)
+    active_keys = [col for col in key_cols if col in out.columns and col in ref.columns]
+    label_mappings: dict = {}
+    info_path = os.path.join(os.path.dirname(reference_csv), "info.json")
+    if os.path.exists(info_path):
+        try:
+            with open(info_path, "r", encoding="utf-8") as f:
+                label_mappings = json.load(f).get("cat_label_mappings", {})
+        except Exception as exc:
+            print(f"[h3_roadcell] failed to load category label mappings: {exc}")
+
+    def key_from_row(row, cols):
+        return tuple(_support_label_value(row[col], col, label_mappings) for col in cols)
+
+    if active_keys:
+        condition_keys = ref[active_keys].apply(lambda row: key_from_row(row, active_keys), axis=1)
+    else:
+        condition_keys = pd.Series([tuple()] * len(ref), index=ref.index)
+
+    ref_cell_keys = ref[H3_ROADCELL_COLUMN].map(
+        lambda value: _support_label_value(value, H3_ROADCELL_COLUMN, label_mappings)
+    )
+    cell_condition: dict[tuple[str, tuple[str, ...]], np.ndarray] = {}
+    for (cell, key), idx in ref.groupby([ref_cell_keys, condition_keys], dropna=False).groups.items():
+        cell_condition[(str(cell), tuple(key))] = np.asarray(list(idx), dtype=int)
+    cell_only = {
+        str(cell): np.asarray(list(idx), dtype=int)
+        for cell, idx in ref.groupby(ref_cell_keys, dropna=False).groups.items()
+    }
+    condition_only = {
+        tuple(key): np.asarray(list(idx), dtype=int)
+        for key, idx in condition_keys.groupby(condition_keys).groups.items()
+    }
+    global_pool = ref.index.to_numpy(dtype=int)
+
+    stats = {
+        "same_cell_condition": 0,
+        "neighbor_cell_condition": 0,
+        "same_cell": 0,
+        "condition_only": 0,
+        "global": 0,
+        "invalid_cell": 0,
+        "n_reference_cells": int(ref_cell_keys.nunique()),
+    }
+    chosen: list[int] = []
+    for _, row in out.iterrows():
+        cell = _support_label_value(row.get(H3_ROADCELL_COLUMN, ""), H3_ROADCELL_COLUMN, label_mappings)
+        key = key_from_row(row, active_keys) if active_keys else tuple()
+        pool = cell_condition.get((cell, key))
+        source = "same_cell_condition"
+        if not cell or cell == "__INVALID__":
+            stats["invalid_cell"] += 1
+            pool = None
+        if pool is None or len(pool) < min_bucket_size:
+            pool = None
+            try:
+                for ring in range(1, max_ring + 1):
+                    candidates: list[int] = []
+                    for neighbor in h3.grid_disk(cell, ring):
+                        arr = cell_condition.get((neighbor, key))
+                        if arr is not None:
+                            candidates.extend(arr.tolist())
+                    if len(candidates) >= min_bucket_size:
+                        pool = np.asarray(candidates, dtype=int)
+                        source = "neighbor_cell_condition"
+                        break
+            except Exception:
+                pool = None
+        if pool is None or len(pool) == 0:
+            pool = cell_only.get(cell)
+            source = "same_cell"
+        if pool is None or len(pool) == 0:
+            pool = condition_only.get(key)
+            source = "condition_only"
+        if pool is None or len(pool) == 0:
+            pool = global_pool
+            source = "global"
+        chosen.append(int(rng.choice(pool)))
+        stats[source] += 1
+
+    sampled = ref.iloc[chosen].reset_index(drop=True)
+    out["ROAD_H3_ANCHOR_CELL"] = sampled[H3_ROADCELL_COLUMN].to_numpy()
+    out[H3_ROADCELL_COLUMN] = sampled[H3_ROADCELL_COLUMN].to_numpy()
+    out["LATITUDE"] = sampled["LATITUDE"].to_numpy(dtype=float)
+    out["LONGITUDE"] = sampled["LONGITUDE"].to_numpy(dtype=float)
+    print(f"[h3_roadcell] decoded ROAD_H3_CELL anchors: {stats}")
+    return out
+
+
+def _load_raw_feature_defaults(data_dir: str) -> dict:
+    x_num = np.load(os.path.join(data_dir, "X_num_train.npy"), allow_pickle=True)
+    x_cat = np.load(os.path.join(data_dir, "X_cat_train.npy"), allow_pickle=True)
+    y = np.load(os.path.join(data_dir, "y_train.npy"), allow_pickle=True)
+
+    cat_defaults = []
+    for column_idx in range(x_cat.shape[1]):
+        values, counts = np.unique(x_cat[:, column_idx], return_counts=True)
+        cat_defaults.append(int(values[np.argmax(counts)]))
+
+    return {
+        "y_mean": float(np.nanmean(y)),
+        "num_mean": np.nanmean(x_num, axis=0).astype(np.float32),
+        "cat_mode": np.asarray(cat_defaults, dtype=np.int64),
+    }
+
+
+def _build_cat_value_maps(info: dict) -> Dict[str, Dict[str, int]]:
+    maps: Dict[str, Dict[str, int]] = {}
+    for col, mapping in info.get("cat_label_mappings", {}).items():
+        inv: Dict[str, int] = {}
+        for key, value in mapping.items():
+            inv[str(value)] = int(key)
+        maps[col] = inv
+    return maps
+
+
+def _encode_cat_value(value, label_to_code: Dict[str, int], default: int) -> int:
+    if pd.isna(value):
+        return default
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        if np.isnan(value):
+            return default
+        if float(value).is_integer():
+            return int(value)
+    text = str(value)
+    if text in label_to_code:
+        return label_to_code[text]
+    try:
+        return int(float(text))
+    except ValueError:
+        return default
+
+
+def build_condition_tensors(
+    condition_df: pd.DataFrame,
+    encoded_dataset,
+    info: dict,
+    data_dir: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    defaults = _load_raw_feature_defaults(data_dir)
+    label_maps = _build_cat_value_maps(info)
+
+    n = len(condition_df)
+    num_cols = info["num_col_names"]
+    cat_cols = info["cat_col_names"]
+    target_col = info["target_col"]
+
+    raw_num = np.tile(
+        np.concatenate([[defaults["y_mean"]], defaults["num_mean"]]).astype(np.float32),
+        (n, 1),
+    )
+    raw_cat = np.tile(defaults["cat_mode"], (n, 1))
+
+    if target_col in condition_df.columns:
+        target_values = pd.to_numeric(condition_df[target_col], errors="coerce").to_numpy(dtype=np.float32)
+        valid = ~np.isnan(target_values)
+        raw_num[valid, 0] = target_values[valid]
+
+    for offset, col in enumerate(num_cols, start=1):
+        if col not in condition_df.columns:
+            continue
+        values = pd.to_numeric(condition_df[col], errors="coerce").to_numpy(dtype=np.float32)
+        valid = ~np.isnan(values)
+        raw_num[valid, offset] = values[valid]
+
+    for idx, col in enumerate(cat_cols):
+        if col not in condition_df.columns:
+            continue
+        default_value = int(defaults["cat_mode"][idx])
+        mapping = label_maps.get(col, {})
+        raw_cat[:, idx] = np.asarray(
+            [_encode_cat_value(value, mapping, default_value) for value in condition_df[col].tolist()],
+            dtype=np.int64,
+        )
+
+    enc_num = raw_num.copy()
+    if encoded_dataset.int_transform is not None:
+        enc_num = encoded_dataset.int_transform.transform(enc_num)
+    if encoded_dataset.num_transform is not None:
+        enc_num = encoded_dataset.num_transform.transform(enc_num)
+
+    enc_cat = raw_cat.copy()
+    if encoded_dataset.cat_transform is not None:
+        enc_cat = encoded_dataset.cat_transform.transform(enc_cat)
+
+    return torch.tensor(enc_num).float(), torch.tensor(enc_cat).long()
+
+
+@torch.no_grad()
+def sample_impute_from_conditions(
+    diffusion: UnifiedCtimeDiffusion,
+    encoded_dataset,
+    x_num: torch.Tensor,
+    x_cat: torch.Tensor,
+    num_mask_idx: List[int],
+    cat_mask_idx: List[int],
+    resample_rounds: int = 1,
+    impute_condition: str = "x_0",
+    w_num: float = 0.0,
+    w_cat: float = 0.0,
+) -> torch.Tensor:
+    device = diffusion.device
+    x_num = x_num.to(device).clone().float()
+    x_cat = x_cat.to(device).clone().long()
+
+    if num_mask_idx:
+        avg_m = torch.tensor(
+            encoded_dataset.X_num["train"][:, num_mask_idx].mean(axis=0),
+            device=device,
+            dtype=torch.float32,
+        )
+        for idx, value in zip(num_mask_idx, avg_m):
+            x_num[:, idx] = value
+
+    mi = diffusion.mask_index
+    for j in cat_mask_idx:
+        x_cat[:, j] = mi[j]
+
+    try:
+        out = diffusion.sample_impute(
+            x_num,
+            x_cat,
+            num_mask_idx,
+            cat_mask_idx,
+            resample_rounds,
+            impute_condition,
+            w_num,
+            w_cat,
+        )
+    finally:
+        _reset_impute_state(diffusion)
+    return out
+
+
+@torch.no_grad()
+def run_hierarchical_chain_sampling(
+    stage1_ckpt_dir: str,
+    stage1_data_dir: str,
+    stage2_ckpt_dir: str,
+    stage2_data_dir: str,
+    stage3_ckpt_dir: str,
+    stage3_data_dir: str,
+    num_samples: int = 5000,
+    batch_size: int = 500,
+    device: str = "cuda:0",
+    output_csv: str = None,
+    do_postprocess: bool = True,
+    impute_resample_rounds: int = 1,
+    impute_condition: str = "x_0",
+    road_graphml: str = None,
+    road_signals: str = None,
+    snap_max_dist_m: float = 300.0,
+    recompute_osm_after_snap: bool = True,
+):
+    print("=" * 60)
+    print("Hierarchical CausalDiffTab - Chain Sampler")
+    print("  Mode: stage1 -> stage2 -> stage3")
+    print(f"  Samples: {num_samples}")
+    print(f"  Device: {device}")
+    print("=" * 60)
+
+    column_groups_json = str(CDT_ROOT / "data" / "processed" / "column_groups.json")
+    with open(column_groups_json, "r", encoding="utf-8") as f:
+        groups = json.load(f)
+
+    stage1_diffusion, stage1_dataset, stage1_info = load_model(stage1_ckpt_dir, stage1_data_dir, device)
+    stage2_diffusion, stage2_dataset, stage2_info = load_model(stage2_ckpt_dir, stage2_data_dir, device)
+    stage3_diffusion, stage3_dataset, stage3_info = load_model(stage3_ckpt_dir, stage3_data_dir, device)
+
+    stage2_encoded = load_forward_dataset(stage2_ckpt_dir, stage2_data_dir, stage2_info)
+    stage3_encoded = load_forward_dataset(stage3_ckpt_dir, stage3_data_dir, stage3_info)
+
+    stage1_df = sample_unconditional(
+        stage1_diffusion,
+        stage1_dataset,
+        stage1_info,
+        num_samples=num_samples,
+        batch_size=batch_size,
+    )
+    stage1_keep = stage1_info["num_col_names"] + stage1_info["cat_col_names"]
+    stage1_df = stage1_df[stage1_keep].copy()
+    stage1_df = repair_stage1_h3_roadcell_support(
+        stage1_df,
+        reference_csv=os.path.join(stage3_data_dir, "train.csv"),
+        resolution=8,
+        seed=42,
+    )
+    stage1_df = enrich_with_osm_context(
+        stage1_df,
+        stage2_info,
+        stage2_data_dir,
+        road_graphml=road_graphml,
+        road_signals=road_signals,
+    )
+
+    stage2_num_mask, stage2_cat_mask = build_stage_impute_masks(
+        stage2_info,
+        groups,
+        impute_stage="stage2",
+        free_target=True,
+    )
+    stage2_num_mask, stage2_cat_mask = _freeze_impute_columns(
+        stage2_num_mask,
+        stage2_cat_mask,
+        stage2_info,
+        DETERMINISTIC_OSM_NUMERIC,
+        DETERMINISTIC_OSM_CATEGORICAL,
+    )
+    print(
+        "[stage2] frozen deterministic OSM columns: "
+        f"num={sorted(DETERMINISTIC_OSM_NUMERIC & set(stage2_info['num_col_names']))}, "
+        f"cat={sorted(DETERMINISTIC_OSM_CATEGORICAL & set(stage2_info['cat_col_names']))}"
+    )
+    stage2_chunks: List[pd.DataFrame] = []
+    for start in range(0, num_samples, batch_size):
+        end = min(start + batch_size, num_samples)
+        chunk_df = stage1_df.iloc[start:end].reset_index(drop=True)
+        x_num, x_cat = build_condition_tensors(chunk_df, stage2_encoded, stage2_info, stage2_data_dir)
+        syn_tensor = sample_impute_from_conditions(
+            stage2_diffusion,
+            stage2_encoded,
+            x_num,
+            x_cat,
+            stage2_num_mask,
+            stage2_cat_mask,
+            resample_rounds=impute_resample_rounds,
+            impute_condition=impute_condition,
+        )
+        stage2_chunk = tensor_to_dataframe(syn_tensor, stage2_dataset, stage2_info)
+        keep_cols = [
+            col for col in stage2_info["num_col_names"] + stage2_info["cat_col_names"]
+            if col not in RETIRED_CONTEXT_COLUMNS
+        ]
+        stage2_chunks.append(stage2_chunk[keep_cols].copy())
+    stage2_df = pd.concat(stage2_chunks, ignore_index=True)
+
+    stage3_num_mask, stage3_cat_mask = build_stage_impute_masks(
+        stage3_info,
+        groups,
+        impute_stage="stage3",
+    )
+    stage3_chunks: List[pd.DataFrame] = []
+    for start in range(0, num_samples, batch_size):
+        end = min(start + batch_size, num_samples)
+        chunk_df = stage2_df.iloc[start:end].reset_index(drop=True)
+        x_num, x_cat = build_condition_tensors(chunk_df, stage3_encoded, stage3_info, stage3_data_dir)
+        syn_tensor = sample_impute_from_conditions(
+            stage3_diffusion,
+            stage3_encoded,
+            x_num,
+            x_cat,
+            stage3_num_mask,
+            stage3_cat_mask,
+            resample_rounds=impute_resample_rounds,
+            impute_condition=impute_condition,
+        )
+        stage3_chunks.append(tensor_to_dataframe(syn_tensor, stage3_dataset, stage3_info))
+    syn_df = pd.concat(stage3_chunks, ignore_index=True)
+    syn_df = syn_df.drop(columns=list(RETIRED_CONTEXT_COLUMNS), errors="ignore")
+
+    if not output_csv:
+        output_dir = os.path.join(str(CDT_ROOT), "result", "nyc_crash", "sampled")
+        os.makedirs(output_dir, exist_ok=True)
+        output_csv = os.path.join(output_dir, "samples.csv")
+
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+    syn_df.to_csv(output_csv, index=False)
+    print(f"\n[saved] Raw samples: {output_csv} ({len(syn_df)} rows)")
+
+    base, ext = os.path.splitext(output_csv)
+    stage1_csv = f"{base}_stage1_chain{ext}"
+    stage2_csv = f"{base}_stage2_chain{ext}"
+    stage1_df.to_csv(stage1_csv, index=False)
+    stage2_df.to_csv(stage2_csv, index=False)
+    print(f"[saved] Stage1 chain context: {stage1_csv}")
+    print(f"[saved] Stage2 chain context: {stage2_csv}")
+
+    if do_postprocess:
+        from src.postprocess_samples import postprocess
+        physical_csv = f"{base}_physical{ext}"
+        print(f"\n[postprocess] Restoring physical values...")
+        ref_train_csv = os.path.join(stage3_data_dir, "train.csv") if os.path.exists(os.path.join(stage3_data_dir, "train.csv")) else None
+        postprocess(
+            samples_csv=output_csv,
+            output_csv=physical_csv,
+            processed_csv=ref_train_csv,
+            info_json=os.path.join(stage3_data_dir, "info.json"),
+            road_graphml=road_graphml,
+            road_signals=road_signals,
+            snap_max_dist_m=snap_max_dist_m,
+            recompute_osm_after_snap=recompute_osm_after_snap,
+        )
+
+    return syn_df
 
 
 def build_stage3_impute_masks(info: dict, column_groups: dict):
@@ -541,6 +1245,7 @@ def run_sampling(
             samples_csv=output_csv,
             output_csv=physical_csv,
             processed_csv=ref_train_csv,
+            info_json=os.path.join(data_dir, "info.json") if data_dir else None,
             road_graphml=road_graphml,
             road_signals=road_signals,
             snap_max_dist_m=snap_max_dist_m,

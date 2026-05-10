@@ -1,0 +1,12 @@
+# CausalDiffTab experiment config
+model_name: our_model_no_h3
+experiment_id: ours_stage2_causal
+lambda_causal: 1.0
+use_causal_masks: true
+hierarchical: true
+train_stage2: true
+description: 当前主模型无 H3 版本：Stage1 时空锚点 + Stage2 天气/OSM 上下文 + Stage3 事故微观变量；H3 r8 保留为机制实验，不进入当前主结果
+sampling:
+  mode: chain_stage123
+  num_samples: null
+  impute_indices_count: 2000

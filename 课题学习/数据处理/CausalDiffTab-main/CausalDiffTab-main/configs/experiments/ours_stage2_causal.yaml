@@ -7,6 +7,6 @@ hierarchical: true
 train_stage2: true
 description: 完整体扩展：Stage1 时空 + 可训练 Stage2 天气/OSM 上下文 + Stage3 事故结果，使用修正后 soft causal mask
 sampling:
-  mode: impute_stage3
+  mode: chain_stage123
   num_samples: null
   impute_indices_count: 2000

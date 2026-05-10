@@ -125,7 +125,9 @@ def main():
             "ablation_no_hierarchy",
             "ours_full_model",
             "ours_stage2_causal",
+            "our_model_no_h3",
             "macro_soft_2024",
+            "our_model",
         ],
         help="与 configs/experiments/*.yaml 中 model_name 一致",
     )
@@ -219,7 +221,20 @@ def main():
         print("[skip_sample] 训练结束，未生成合成 CSV")
         return
 
-    if mode == "impute_stage2":
+    if mode == "chain_stage123":
+        stage1_dataname = args.dataname.replace("nyc_crash", "nyc_stage1", 1) if args.dataname.startswith("nyc_crash_") else "nyc_stage1"
+        stage2_dataname = args.dataname.replace("nyc_crash", "nyc_stage2", 1) if args.dataname.startswith("nyc_crash_") else "nyc_stage2"
+        stage1_ckpt_dir = CDT_ROOT / "ckpt" / stage1_dataname / f"stage1_spatial_{args.tier}_{experiment_id}"
+        stage2_ckpt_dir = CDT_ROOT / "ckpt" / stage2_dataname / f"stage2_context_{args.tier}_{experiment_id}"
+        stage3_ckpt_dir = CDT_ROOT / "ckpt" / args.dataname / f"stage3_full_{args.tier}_{experiment_id}"
+        stage1_data_root = CDT_ROOT / "data" / stage1_dataname
+        stage2_data_root = CDT_ROOT / "data" / stage2_dataname
+        data_root = CDT_ROOT / "data" / args.dataname
+        impute_stage = "stage3"
+        for ckpt_dir in [stage1_ckpt_dir, stage2_ckpt_dir, stage3_ckpt_dir]:
+            if not (ckpt_dir / "config.pkl").is_file():
+                raise SystemExit(f"缺少 checkpoint 目录或 config.pkl: {ckpt_dir}")
+    elif mode == "impute_stage2":
         stage2_dataname = args.dataname.replace("nyc_crash", "nyc_stage2", 1) if args.dataname.startswith("nyc_crash_") else "nyc_stage2"
         ckpt_dir = CDT_ROOT / "ckpt" / stage2_dataname / f"stage2_context_{args.tier}_{experiment_id}"
         data_root = CDT_ROOT / "data" / stage2_dataname
@@ -228,7 +243,7 @@ def main():
         ckpt_dir = CDT_ROOT / "ckpt" / args.dataname / f"stage3_full_{args.tier}_{experiment_id}"
         data_root = CDT_ROOT / "data" / args.dataname
         impute_stage = "stage3"
-    if not (ckpt_dir / "config.pkl").is_file():
+    if mode != "chain_stage123" and not (ckpt_dir / "config.pkl").is_file():
         raise SystemExit(f"缺少 checkpoint 目录或 config.pkl: {ckpt_dir}")
 
     num_samples = _default_num_samples(cfg, args.tier)
@@ -236,7 +251,7 @@ def main():
     raw_out = syn_dir / f"_{args.model}_{args.tier}_samples.csv"
 
     sys.path.insert(0, str(CDT_ROOT))
-    from src.sample_conditional import run_sampling
+    from src.sample_conditional import run_sampling, run_hierarchical_chain_sampling
 
     cond_indices = None
     if mode in {"impute_stage2", "impute_stage3"}:
@@ -253,21 +268,40 @@ def main():
         )
         cond_indices = str(idx_file)
 
-    run_sampling(
-        ckpt_dir=str(ckpt_dir),
-        data_dir=data_dir,
-        condition_train_indices=cond_indices,
-        num_samples=num_samples,
-        batch_size=min(500, num_samples),
-        device=args.device,
-        output_csv=str(raw_out),
-        do_postprocess=(mode != "impute_stage2"),
-        road_graphml=args.road_graphml,
-        road_signals=args.road_signals,
-        snap_max_dist_m=args.snap_max_dist_m,
-        recompute_osm_after_snap=not args.no_recompute_osm,
-        impute_stage=impute_stage,
-    )
+    if mode == "chain_stage123":
+        run_hierarchical_chain_sampling(
+            stage1_ckpt_dir=str(stage1_ckpt_dir),
+            stage1_data_dir=str(stage1_data_root),
+            stage2_ckpt_dir=str(stage2_ckpt_dir),
+            stage2_data_dir=str(stage2_data_root),
+            stage3_ckpt_dir=str(stage3_ckpt_dir),
+            stage3_data_dir=str(data_root),
+            num_samples=num_samples,
+            batch_size=min(500, num_samples),
+            device=args.device,
+            output_csv=str(raw_out),
+            do_postprocess=True,
+            road_graphml=args.road_graphml,
+            road_signals=args.road_signals,
+            snap_max_dist_m=args.snap_max_dist_m,
+            recompute_osm_after_snap=not args.no_recompute_osm,
+        )
+    else:
+        run_sampling(
+            ckpt_dir=str(ckpt_dir),
+            data_dir=data_dir,
+            condition_train_indices=cond_indices,
+            num_samples=num_samples,
+            batch_size=min(500, num_samples),
+            device=args.device,
+            output_csv=str(raw_out),
+            do_postprocess=(mode != "impute_stage2"),
+            road_graphml=args.road_graphml,
+            road_signals=args.road_signals,
+            snap_max_dist_m=args.snap_max_dist_m,
+            recompute_osm_after_snap=not args.no_recompute_osm,
+            impute_stage=impute_stage,
+        )
 
     if mode == "impute_stage2":
         shutil.copy2(raw_out, final_csv)

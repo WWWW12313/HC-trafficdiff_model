@@ -32,7 +32,7 @@ import json
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -43,6 +43,9 @@ __all__ = [
     "snap_points_to_road",
     "validate_points",
     "postprocess_latlon_df",
+    "enrich_road_context",
+    "infer_lanes",
+    "infer_speed_limit_mph",
 ]
 
 # NYC 地理边界（宽松）
@@ -68,7 +71,7 @@ class RoadCandidateSet:
     latlon: np.ndarray
 
     # BallTree 索引（haversine 距离，单位 radian）
-    tree: object  # sklearn BallTree
+    tree: Any  # sklearn BallTree
 
     # UTM 坐标 (米制)，用于欧式距离计算
     utm_xy: np.ndarray  # shape (N, 2), [x_east, y_north]
@@ -94,6 +97,354 @@ def _haversine_m(lat1: np.ndarray, lon1: np.ndarray,
 def _deg_to_rad_latlon(latlon_deg: np.ndarray) -> np.ndarray:
     """(N,2) lat/lon 度数 → 弧度，供 BallTree haversine 用。"""
     return np.radians(latlon_deg)
+
+
+def _compat_bool(v) -> bool:
+    if isinstance(v, bool):
+        return v
+    return str(v).lower() in ("yes", "true", "1", "on")
+
+
+def _edge_value(edge_data: dict, key: str, default=None):
+    value = edge_data.get(key, default)
+    return value[0] if isinstance(value, list) else value
+
+
+def infer_lanes(raw_lanes, highway_type: str) -> int:
+    """Infer a conservative lane count from OSM lanes/highway tags."""
+    try:
+        return int(float(str(raw_lanes)))
+    except (ValueError, TypeError):
+        pass
+    highway = str(highway_type).lower()
+    if "motorway" in highway or "trunk" in highway:
+        return 3
+    if "primary" in highway:
+        return 2
+    return 1
+
+
+def infer_speed_limit_mph(raw_speed, highway_type: str) -> float:
+    """Infer NYC speed limit in mph from OSM maxspeed/highway tags."""
+    import re
+
+    text = str(raw_speed or "").lower()
+    values = [float(value) for value in re.findall(r"\d+(?:\.\d+)?", text)]
+    if values:
+        speed = float(np.median(values))
+        if "km" in text or "kph" in text:
+            speed *= 0.621371
+        return float(np.clip(round(speed / 5.0) * 5.0, 5.0, 70.0))
+
+    highway = str(highway_type).lower()
+    if "motorway" in highway:
+        return 50.0
+    if "trunk" in highway:
+        return 40.0
+    if "primary" in highway or "secondary" in highway:
+        return 30.0
+    return 25.0
+
+
+def _load_graph(graphml_path: str | Path):
+    import osmnx as ox
+
+    return ox.load_graphml(
+        str(graphml_path),
+        edge_dtypes={"oneway": _compat_bool, "reversed": _compat_bool},
+        graph_dtypes={"consolidated": _compat_bool, "simplified": _compat_bool},
+    )
+
+
+def _traffic_signal_xy(G_proj, signals_path: Optional[str | Path], crs: str) -> Optional[np.ndarray]:
+    sig_loaded = False
+    sig_coords: Optional[np.ndarray] = None
+
+    if signals_path is not None and Path(signals_path).exists():
+        try:
+            import geopandas as gpd
+
+            sig_gdf = gpd.read_file(str(signals_path)).to_crs(crs)
+            sig_coords = np.column_stack([
+                np.asarray(sig_gdf.geometry.x, dtype=float),
+                np.asarray(sig_gdf.geometry.y, dtype=float),
+            ])
+            sig_loaded = True
+        except Exception:
+            sig_loaded = False
+
+    if not sig_loaded:
+        sig_xy = []
+        for _, attrs in G_proj.nodes(data=True):
+            tags = attrs.get("tags", {})
+            highway = tags.get("highway", "") if isinstance(tags, dict) else str(tags)
+            if "traffic_signals" in str(highway):
+                try:
+                    sig_xy.append((float(attrs["x"]), float(attrs["y"])))
+                except (KeyError, ValueError):
+                    pass
+        if sig_xy:
+            sig_coords = np.asarray(sig_xy, dtype=float)
+
+    if sig_coords is None or len(sig_coords) == 0:
+        return None
+    return sig_coords
+
+
+def _neighbor_csv_paths(graphml_path: Path) -> tuple[Path, Path]:
+    return graphml_path.with_name("nyc_nodes.csv"), graphml_path.with_name("nyc_edges.csv")
+
+
+def _signal_latlon_from_graphml(graphml_path: Path) -> Optional[np.ndarray]:
+    cache_path = graphml_path.with_name("nyc_traffic_signal_latlon.npz")
+    if cache_path.exists():
+        data = np.load(cache_path)
+        latlon = np.asarray(data["latlon"], dtype=float)
+        return latlon if len(latlon) > 0 else None
+
+    import xml.etree.ElementTree as ET
+
+    ns = "{http://graphml.graphdrawing.org/xmlns}"
+    key_name: dict[str, tuple[str, str]] = {}
+    signals: list[tuple[float, float]] = []
+
+    for event, elem in ET.iterparse(graphml_path, events=("end",)):
+        if elem.tag == f"{ns}key":
+            key_id = elem.attrib.get("id", "")
+            key_for = elem.attrib.get("for", "")
+            attr_name = elem.attrib.get("attr.name", "")
+            if key_id and attr_name:
+                key_name[key_id] = (key_for, attr_name)
+        elif elem.tag == f"{ns}node":
+            values: dict[str, str] = {}
+            for data in elem.findall(f"{ns}data"):
+                key_for, attr_name = key_name.get(data.attrib.get("key", ""), ("", ""))
+                if key_for == "node" and attr_name:
+                    values[attr_name] = data.text or ""
+            tags = values.get("tags", "")
+            if "traffic_signals" in tags:
+                try:
+                    signals.append((float(values["y"]), float(values["x"])))
+                except (KeyError, ValueError):
+                    pass
+            elem.clear()
+        elif elem.tag == f"{ns}edge":
+            break
+
+    latlon = np.asarray(signals, dtype=float)
+    try:
+        np.savez_compressed(cache_path, latlon=latlon)
+    except Exception:
+        pass
+    return latlon if len(latlon) > 0 else None
+
+
+def _try_enrich_road_context_from_csv(
+    df: pd.DataFrame,
+    graphml_path: Path,
+    lat_col: str,
+    lon_col: str,
+    wanted: set[str],
+    overwrite: bool,
+    verbose: bool,
+) -> Optional[pd.DataFrame]:
+    nodes_csv, edges_csv = _neighbor_csv_paths(graphml_path)
+    if not nodes_csv.exists() or not edges_csv.exists():
+        return None
+
+    from sklearn.neighbors import BallTree
+
+    out = df.copy()
+    valid_mask = out[lat_col].notna() & out[lon_col].notna()
+    if not bool(valid_mask.any()):
+        return out
+
+    valid_index = out.index[valid_mask]
+    lats = out.loc[valid_index, lat_col].to_numpy(dtype=float)
+    lons = out.loc[valid_index, lon_col].to_numpy(dtype=float)
+    point_rad = np.radians(np.column_stack([lats, lons]))
+
+    if {"DIST_TO_SIGNAL_M", "HAS_TRAFFIC_SIGNAL"} & wanted:
+        signal_latlon = _signal_latlon_from_graphml(graphml_path)
+        if signal_latlon is not None:
+            sig_tree = BallTree(np.radians(signal_latlon), metric="haversine")
+            dists_rad, _ = sig_tree.query(point_rad, k=1)
+            signal_dist = dists_rad[:, 0] * 6_371_000.0
+            if "DIST_TO_SIGNAL_M" in wanted and (overwrite or "DIST_TO_SIGNAL_M" not in out.columns):
+                out.loc[valid_index, "DIST_TO_SIGNAL_M"] = signal_dist
+            if "HAS_TRAFFIC_SIGNAL" in wanted and (overwrite or "HAS_TRAFFIC_SIGNAL" not in out.columns):
+                out.loc[valid_index, "HAS_TRAFFIC_SIGNAL"] = (signal_dist < 30.0).astype(int)
+            if verbose:
+                print(f"[road_context] 信号灯匹配完成（GraphML 流式解析），<30m 占比 {(signal_dist < 30.0).mean():.1%}")
+        elif verbose:
+            print("[road_context] 未找到信号灯数据，信号灯列保持原值")
+
+    road_cols = {"OSM_TYPE", "OSM_ONEWAY", "HAS_DIVIDER", "INFERRED_LANES", "REAL_SPEED_LIMIT"}
+    if road_cols & wanted:
+        nodes = pd.read_csv(nodes_csv, usecols=["osmid", "lat", "lon"], low_memory=False)
+        edges = pd.read_csv(edges_csv, low_memory=False)
+        if "u" not in edges.columns or "v" not in edges.columns:
+            return None
+        left = nodes.rename(columns={"osmid": "u", "lat": "u_lat", "lon": "u_lon"})
+        right = nodes.rename(columns={"osmid": "v", "lat": "v_lat", "lon": "v_lon"})
+        edges = edges.merge(left, on="u", how="left").merge(right, on="v", how="left")
+        edges = edges.dropna(subset=["u_lat", "u_lon", "v_lat", "v_lon"])
+        if len(edges) == 0:
+            return None
+
+        mid_lat = (pd.to_numeric(edges["u_lat"], errors="coerce") + pd.to_numeric(edges["v_lat"], errors="coerce")) / 2.0
+        mid_lon = (pd.to_numeric(edges["u_lon"], errors="coerce") + pd.to_numeric(edges["v_lon"], errors="coerce")) / 2.0
+        keep = mid_lat.notna() & mid_lon.notna()
+        edges = edges.loc[keep].reset_index(drop=True)
+        edge_rad = np.radians(np.column_stack([mid_lat.loc[keep].to_numpy(dtype=float), mid_lon.loc[keep].to_numpy(dtype=float)]))
+        edge_tree = BallTree(edge_rad, metric="haversine")
+        _, idx = edge_tree.query(point_rad, k=1)
+        nearest = edges.iloc[idx[:, 0]].reset_index(drop=True)
+
+        highway_values = nearest.get("highway", pd.Series("residential", index=nearest.index)).fillna("residential").astype(str).tolist()
+        lanes_values = nearest.get("lanes", pd.Series(np.nan, index=nearest.index)).tolist()
+        oneway_values = nearest.get("oneway", pd.Series(False, index=nearest.index)).tolist()
+        maxspeed_values = nearest.get("maxspeed", pd.Series(None, index=nearest.index)).tolist()
+
+        assignments = {
+            "OSM_TYPE": highway_values,
+            "OSM_ONEWAY": [int(_compat_bool(value)) for value in oneway_values],
+            "HAS_DIVIDER": np.zeros(len(nearest), dtype=int),
+            "INFERRED_LANES": [infer_lanes(lane, highway) for lane, highway in zip(lanes_values, highway_values)],
+            "REAL_SPEED_LIMIT": [infer_speed_limit_mph(speed, highway) for speed, highway in zip(maxspeed_values, highway_values)],
+        }
+        for col, values in assignments.items():
+            if col in wanted and (overwrite or col not in out.columns):
+                out.loc[valid_index, col] = values
+        if verbose:
+            print(f"[road_context] 最近道路边匹配完成（CSV 中点 BallTree）: {len(valid_index):,} 行")
+
+    if verbose:
+        print(f"[road_context] OSM 上下文补全完成: {sorted(wanted)}")
+    return out
+
+
+def enrich_road_context(
+    df: pd.DataFrame,
+    graphml_path: str | Path,
+    signals_path: Optional[str | Path] = None,
+    lat_col: str = "LATITUDE",
+    lon_col: str = "LONGITUDE",
+    columns: Optional[list[str] | set[str] | tuple[str, ...]] = None,
+    overwrite: bool = True,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """
+    Fill deterministic OSM road context for rows with valid coordinates.
+
+    This is the single shared implementation for data preparation, chain sampling,
+    and postprocess OSM recomputation.
+    """
+    import geopandas as gpd
+    import osmnx as ox
+    from sklearn.neighbors import BallTree
+
+    wanted = set(columns or [
+        "DIST_TO_SIGNAL_M",
+        "HAS_TRAFFIC_SIGNAL",
+        "OSM_TYPE",
+        "OSM_ONEWAY",
+        "HAS_DIVIDER",
+        "INFERRED_LANES",
+        "REAL_SPEED_LIMIT",
+    ])
+    if not wanted:
+        return df.copy()
+    if lat_col not in df.columns or lon_col not in df.columns:
+        if verbose:
+            print("[road_context] LATITUDE/LONGITUDE missing; skip OSM lookup")
+        return df.copy()
+
+    graphml_path = Path(graphml_path)
+    if not graphml_path.exists():
+        if verbose:
+            print(f"[road_context] graphml missing; skip OSM lookup: {graphml_path}")
+        return df.copy()
+
+    fast_out = _try_enrich_road_context_from_csv(df, graphml_path, lat_col, lon_col, wanted, overwrite, verbose)
+    if fast_out is not None:
+        return fast_out
+
+    out = df.copy()
+    valid_mask = out[lat_col].notna() & out[lon_col].notna()
+    if not bool(valid_mask.any()):
+        return out
+
+    valid_index = out.index[valid_mask]
+    lats = out.loc[valid_index, lat_col].to_numpy(dtype=float)
+    lons = out.loc[valid_index, lon_col].to_numpy(dtype=float)
+
+    if verbose:
+        print(f"[road_context] 加载路网: {graphml_path.name} ...")
+    G = _load_graph(graphml_path)
+
+    if {"DIST_TO_SIGNAL_M", "HAS_TRAFFIC_SIGNAL"} & wanted:
+        G_proj = ox.project_graph(G, to_crs=NYC_UTM_CRS)
+        sig_coords = _traffic_signal_xy(G_proj, signals_path, NYC_UTM_CRS)
+        if sig_coords is not None:
+            point_gdf = gpd.GeoDataFrame(
+                geometry=gpd.points_from_xy(lons, lats),
+                crs=WGS84_CRS,
+            ).to_crs(NYC_UTM_CRS)
+            point_coords = np.column_stack([
+                np.asarray(point_gdf.geometry.x, dtype=float),
+                np.asarray(point_gdf.geometry.y, dtype=float),
+            ])
+            tree = BallTree(sig_coords, leaf_size=15)
+            dists, _ = tree.query(point_coords, k=1)
+            signal_dist = dists[:, 0]
+            if "DIST_TO_SIGNAL_M" in wanted and (overwrite or "DIST_TO_SIGNAL_M" not in out.columns):
+                out.loc[valid_index, "DIST_TO_SIGNAL_M"] = signal_dist
+            if "HAS_TRAFFIC_SIGNAL" in wanted and (overwrite or "HAS_TRAFFIC_SIGNAL" not in out.columns):
+                out.loc[valid_index, "HAS_TRAFFIC_SIGNAL"] = (signal_dist < 30.0).astype(int)
+            if verbose:
+                print(f"[road_context] 信号灯匹配完成，<30m 占比 {(signal_dist < 30.0).mean():.1%}")
+        elif verbose:
+            print("[road_context] 未找到信号灯数据，信号灯列保持原值")
+
+    road_cols = {"OSM_TYPE", "OSM_ONEWAY", "HAS_DIVIDER", "INFERRED_LANES", "REAL_SPEED_LIMIT"}
+    if road_cols & wanted:
+        if verbose:
+            print(f"[road_context] 匹配最近道路边: {len(valid_index):,} 行")
+        nearest_edges = ox.nearest_edges(G, X=lons, Y=lats)
+
+        osm_types, osm_oneways, inferred_lanes, speed_limits, has_dividers = [], [], [], [], []
+        for u, v, key in nearest_edges:
+            edge = G.get_edge_data(u, v, key) or {}
+            highway_type = str(_edge_value(edge, "highway", "residential"))
+            raw_lanes = _edge_value(edge, "lanes")
+            raw_speed = _edge_value(edge, "maxspeed")
+            divider_raw = " ".join(
+                str(_edge_value(edge, attr, ""))
+                for attr in ["divider", "median", "separation", "barrier"]
+                if _edge_value(edge, attr, "") not in (None, "")
+            ).lower()
+
+            osm_types.append(highway_type)
+            osm_oneways.append(int(bool(_edge_value(edge, "oneway", False))))
+            inferred_lanes.append(infer_lanes(raw_lanes, highway_type))
+            speed_limits.append(infer_speed_limit_mph(raw_speed, highway_type))
+            has_dividers.append(int(any(token in divider_raw for token in ["yes", "median", "divider", "barrier", "kerb"])))
+
+        assignments = {
+            "OSM_TYPE": osm_types,
+            "OSM_ONEWAY": osm_oneways,
+            "HAS_DIVIDER": has_dividers,
+            "INFERRED_LANES": inferred_lanes,
+            "REAL_SPEED_LIMIT": speed_limits,
+        }
+        for col, values in assignments.items():
+            if col in wanted and (overwrite or col not in out.columns):
+                out.loc[valid_index, col] = values
+
+    if verbose:
+        print(f"[road_context] OSM 上下文补全完成: {sorted(wanted)}")
+    return out
 
 
 def build_road_candidate_set(
@@ -142,16 +493,7 @@ def build_road_candidate_set(
         print(f"[road_snap] 加载路网: {graphml_path.name} ...")
 
     # ── 加载路网 ──────────────────────────────────────────────────────────
-    def _compat_bool(v) -> bool:
-        if isinstance(v, bool):
-            return v
-        return str(v).lower() in ("yes", "true", "1", "on")
-
-    G = ox.load_graphml(
-        str(graphml_path),
-        edge_dtypes={"oneway": _compat_bool, "reversed": _compat_bool},
-        graph_dtypes={"consolidated": _compat_bool, "simplified": _compat_bool},
-    )
+    G = _load_graph(graphml_path)
     G_proj = ox.project_graph(G, to_crs=NYC_UTM_CRS)
 
     # ── 路口节点候选点 ────────────────────────────────────────────────────
@@ -474,11 +816,15 @@ if __name__ == "__main__":
 
     if args.csv:
         df = pd.read_csv(args.csv)
-        stats_before = validate_points(df["LATITUDE"].values, df["LONGITUDE"].values, rcs)
+        lat_values = df["LATITUDE"].to_numpy(dtype=float, na_value=np.nan)
+        lon_values = df["LONGITUDE"].to_numpy(dtype=float, na_value=np.nan)
+        stats_before = validate_points(lat_values, lon_values, rcs)
         print(f"\n吸附前: 均值距道路 {stats_before['mean_dist_m']:.1f}m, "
               f"落路率 {stats_before['on_road_pct']:.1%}")
         df = postprocess_latlon_df(df, rcs, jitter_m=args.jitter_m)
-        stats_after = validate_points(df["LATITUDE"].values, df["LONGITUDE"].values, rcs)
+        lat_values = df["LATITUDE"].to_numpy(dtype=float, na_value=np.nan)
+        lon_values = df["LONGITUDE"].to_numpy(dtype=float, na_value=np.nan)
+        stats_after = validate_points(lat_values, lon_values, rcs)
         print(f"吸附后: 均值距道路 {stats_after['mean_dist_m']:.1f}m, "
               f"落路率 {stats_after['on_road_pct']:.1%}")
         if args.out_csv:

@@ -34,7 +34,7 @@ def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: 
     idx = {name: i for i, name in enumerate(feature_names)}
 
     time_nodes = set(groups.get("stage1_continuous", [])) | set(groups.get("stage1_categorical", []))
-    spatial_nodes = {"LATITUDE", "LONGITUDE"}
+    spatial_nodes = {"LATITUDE", "LONGITUDE", "ROAD_H3_CELL"}
     time_nodes -= spatial_nodes
     weather_nodes = {"TEMP_C", "prcp", "WIND_SPEED_KMH", "coco", "WEATHER_CONDITION"}
     road_nodes = {
@@ -79,6 +79,7 @@ def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: 
 
     added = 0
     added += keep_edges(spatial_nodes, road_nodes, 1.0)
+    added += keep_edges({"ROAD_H3_CELL"}, stage3_nodes, 0.5)
     added += keep_edges(time_nodes, weather_nodes, 1.0)
     added += keep_edges(weather_nodes | road_nodes, factor_nodes, 0.5)
     added += keep_edges(time_nodes, factor_nodes, 1.0)
@@ -90,6 +91,67 @@ def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: 
     np.fill_diagonal(W, 0.0)
     print(f"[causal_rules] removed={removed}, enforced_or_upweighted={added}")
     return W
+
+
+def _align_causal_matrix_to_features(W: np.ndarray, feature_names: list[str]) -> np.ndarray:
+    """Align legacy causal matrices to the active feature schema by name.
+
+    Older matrices include REAL_SPEED_LIMIT between DIST_TO_SIGNAL_M and
+    INFERRED_LANES. After dropping that field, positional slicing would shift
+    every downstream column by one, so we explicitly remove the retired slot.
+    """
+    n_features = len(feature_names)
+    if W.shape == (n_features, n_features):
+        return W
+
+    retired_features = ["REAL_SPEED_LIMIT"]
+    legacy_features = list(feature_names)
+    newly_added_features = ["ROAD_H3_CELL"]
+    legacy_without_added = [name for name in legacy_features if name not in newly_added_features]
+    if W.shape == (len(legacy_without_added), len(legacy_without_added)):
+        aligned = np.zeros((n_features, n_features), dtype=np.float32)
+        old_idx = [legacy_without_added.index(name) for name in legacy_without_added]
+        new_idx = [feature_names.index(name) for name in legacy_without_added]
+        aligned[np.ix_(new_idx, new_idx)] = W[np.ix_(old_idx, old_idx)].astype(np.float32)
+        print(
+            f"[causal_align] expanded legacy W {W.shape} -> {aligned.shape}; "
+            f"added_zero_features={newly_added_features}"
+        )
+        return aligned
+
+    for retired in retired_features:
+        if retired not in legacy_features:
+            insert_after = "DIST_TO_SIGNAL_M"
+            if insert_after in legacy_features:
+                legacy_features.insert(legacy_features.index(insert_after) + 1, retired)
+
+    missing_in_legacy = [name for name in feature_names if name not in legacy_features]
+    if missing_in_legacy:
+        common_features = [name for name in feature_names if name in legacy_features]
+        if W.shape == (len(legacy_features), len(legacy_features)):
+            aligned = np.zeros((n_features, n_features), dtype=np.float32)
+            old_idx = [legacy_features.index(name) for name in common_features]
+            new_idx = [feature_names.index(name) for name in common_features]
+            aligned[np.ix_(new_idx, new_idx)] = W[np.ix_(old_idx, old_idx)].astype(np.float32)
+            print(
+                f"[causal_align] expanded legacy W {W.shape} -> {aligned.shape}; "
+                f"added_zero_features={missing_in_legacy}"
+            )
+            return aligned
+
+    if W.shape == (len(legacy_features), len(legacy_features)):
+        keep_idx = [legacy_features.index(name) for name in feature_names]
+        aligned = W[np.ix_(keep_idx, keep_idx)].astype(np.float32)
+        print(
+            f"[causal_align] aligned legacy W {W.shape} -> {aligned.shape}; "
+            f"dropped={retired_features}"
+        )
+        return aligned
+
+    raise ValueError(
+        f"Cannot align causal matrix shape={W.shape} to {n_features} active features. "
+        f"Regenerate the NOTEARS/macro matrix or provide matching column_groups.json."
+    )
 
 
 def _expand_subset_causal_masks(
@@ -429,6 +491,7 @@ def build_causal_mask_for_model(
     W = np.load(notears_npy).astype(np.float32)
     if groups is not None:
         feature_names = groups["continuous_cols"] + groups["categorical_cols"]
+        W = _align_causal_matrix_to_features(W, feature_names)
         W = _apply_domain_causal_rules(W, feature_names, groups)
     n_num = info["n_num_features"]
     n_cat = info["n_cat_features"]
@@ -551,6 +614,7 @@ def run_prepare(
     all_num = groups["continuous_cols"]
     all_cat = groups["categorical_cols"]
     all_features = all_num + all_cat
+    W_full = _align_causal_matrix_to_features(W_full, all_features)
     W_full = _apply_domain_causal_rules(W_full, all_features, groups)
     s1_indices = [all_features.index(f) for f in stage1_num + stage1_cat if f in all_features]
 

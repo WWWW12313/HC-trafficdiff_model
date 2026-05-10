@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import sys
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +38,26 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW  = ROOT / "raw_data"
+sys.path.insert(0, str(ROOT))
+
+H3_RESOLUTION = 8
+
+
+def _latlon_to_h3_cell(lat, lon, resolution: int = H3_RESOLUTION) -> str:
+    try:
+        import h3
+
+        lat_f = float(lat)
+        lon_f = float(lon)
+        if not np.isfinite(lat_f) or not np.isfinite(lon_f):
+            return "__INVALID__"
+        return h3.latlng_to_cell(lat_f, lon_f, resolution)
+    except ImportError as exc:
+        raise RuntimeError(
+            "h3 package is required for ROAD_H3_CELL; install it in the active Python environment"
+        ) from exc
+    except Exception:
+        return "__INVALID__"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. 基础特征工程（与 prepare_postcovid_data.py 完全对齐）
@@ -110,179 +131,24 @@ def enrich_osm(df: pd.DataFrame, graphml_path: Path, signals_path: Optional[Path
     为 df 中每个事故坐标匹配 OSM 路网特征。
     新增/更新列: DIST_TO_SIGNAL_M, HAS_TRAFFIC_SIGNAL, OSM_TYPE, OSM_ONEWAY, INFERRED_LANES
     """
-    import osmnx as ox
-    import geopandas as gpd
-    from shapely.geometry import Point
-    from sklearn.neighbors import BallTree
+    from src.road_snap import enrich_road_context
 
-    print(f"  [OSM] 加载路网: {graphml_path.name} ...")
-    # 旧版 osmnx 保存 graphml 时用 'yes'/'no'/'reversible' 等字符串表示布尔属性，
-    # osmnx 2.x 的 _convert_bool_string 只认 'True'/'False'（大写），会抛 ValueError。
-    # 直接通过 load_graphml 的 edge_dtypes/graph_dtypes 参数传入宽松转换器，
-    # 无需 monkey-patch。
-    def _compat_bool(v) -> bool:
-        if isinstance(v, bool): return v
-        vl = str(v).lower()
-        return vl in ("yes", "true", "1", "on")  # 其余值（含 'reversible'/'no'/'none'）→ False
-
-    G = ox.load_graphml(
-        str(graphml_path),
-        edge_dtypes={"oneway": _compat_bool, "reversed": _compat_bool},
-        graph_dtypes={"consolidated": _compat_bool, "simplified": _compat_bool},
+    return enrich_road_context(
+        df,
+        graphml_path=graphml_path,
+        signals_path=signals_path,
+        columns={
+            "DIST_TO_SIGNAL_M",
+            "HAS_TRAFFIC_SIGNAL",
+            "OSM_TYPE",
+            "OSM_ONEWAY",
+            "REAL_SPEED_LIMIT",
+            "HAS_DIVIDER",
+            "INFERRED_LANES",
+        },
+        overwrite=True,
+        verbose=True,
     )
-    # 注意：旧版 osmnx 保存的 graphml 中，边的 geometry WKT 仍是经纬度坐标，
-    # ox.project_graph 只重投影节点 x/y 而不重投影边 geometry，导致 nearest_edges
-    # （基于边 geometry 的空间索引）坐标系错位。
-    # 修复：nearest_edges 直接用原始地理图 G（EPSG:4326）+ lon/lat 坐标；
-    #       信号灯距离仍用投影图节点（x/y 属性已正确投影到 UTM）。
-    G_proj  = ox.project_graph(G, to_crs="EPSG:32618")
-    NYC_CRS = "EPSG:32618"
-
-    # 过滤无效坐标
-    valid_mask = df["LATITUDE"].notna() & df["LONGITUDE"].notna()
-    df = df.copy()
-
-    # GeoDataFrame（仅处理有效行）
-    df_valid = df[valid_mask].copy()
-    geometry = [Point(lon, lat) for lon, lat in zip(df_valid["LONGITUDE"], df_valid["LATITUDE"])]
-    gdf      = gpd.GeoDataFrame(df_valid, geometry=geometry, crs="EPSG:4326")
-    gdf_proj = gdf.to_crs(NYC_CRS)
-
-    # ── 2a. 信号灯距离 ─────────────────────────────────────────────────────
-    dist_arr = np.full(len(df_valid), np.nan)
-    has_sig  = np.zeros(len(df_valid), dtype=int)
-
-    def _is_sig(v) -> bool:
-        # 兼容多种存储格式：
-        #   - 字符串 "traffic_signals"
-        #   - 旧版 osmnx 保存的 dict repr "{'highway': 'traffic_signals'}"
-        #   - 列表 ['traffic_signals']
-        return "traffic_signals" in str(v)
-
-    # 优先用独立 GeoJSON（体积小、加载快）
-    sig_loaded = False
-    if signals_path is not None and signals_path.exists():
-        try:
-            sig_gdf   = gpd.read_file(str(signals_path)).to_crs(NYC_CRS)
-            sig_coords = np.column_stack([
-                np.asarray(sig_gdf.geometry.x, dtype=float),
-                np.asarray(sig_gdf.geometry.y, dtype=float),
-            ])
-            sig_loaded = True
-        except Exception:
-            pass
-
-    if not sig_loaded:
-        # 直接遍历 G_proj 节点，从 tags 字典提取投影坐标（x/y 已是 UTM 米制）
-        # 旧版 osmnx 将 OSM 标签存储为 attrs['tags'] dict，不展开为单独属性列
-        sig_xy = []
-        for _, attrs in G_proj.nodes(data=True):
-            tags = attrs.get("tags", {})
-            hw = tags.get("highway", "") if isinstance(tags, dict) else str(tags)
-            if "traffic_signals" in str(hw):
-                try:
-                    sig_xy.append((float(attrs["x"]), float(attrs["y"])))
-                except (KeyError, ValueError):
-                    pass
-        if sig_xy:
-            sig_coords = np.array(sig_xy)
-            sig_loaded = True
-            print(f"  [OSM] 找到 {len(sig_xy):,} 个信号灯节点（从路网图提取）")
-
-    if sig_loaded and len(sig_coords) > 0:
-        pt_coords = np.column_stack([
-            np.asarray(gdf_proj.geometry.x, dtype=float),
-            np.asarray(gdf_proj.geometry.y, dtype=float),
-        ])
-        tree      = BallTree(sig_coords, leaf_size=15)
-        dists, _  = tree.query(pt_coords, k=1)
-        dist_arr  = dists[:, 0]
-        has_sig   = (dist_arr < 30).astype(int)
-        sig_match_rate = has_sig.mean()
-        print(f"  [OSM] 信号灯匹配完成，<30m 占比 {sig_match_rate:.1%}")
-    else:
-        print("  [OSM] ⚠ 无信号灯数据，DIST_TO_SIGNAL_M/HAS_TRAFFIC_SIGNAL 保持 NaN/0")
-
-    df.loc[valid_mask, "DIST_TO_SIGNAL_M"]   = dist_arr
-    df.loc[valid_mask, "HAS_TRAFFIC_SIGNAL"] = has_sig
-
-    # ── 2b. 最近道路属性 ──────────────────────────────────────────────────
-    # 用原始地理图 G（EPSG:4326）做 nearest_edges，传入 lon/lat；
-    # 旧版 graphml 边 geometry 仍是经纬度，与 G 的 CRS 一致，空间索引正确。
-    print("  [OSM] 匹配最近道路边...")
-    ne_edges = ox.nearest_edges(
-        G,
-        X=np.asarray(df_valid["LONGITUDE"], dtype=float),
-        Y=np.asarray(df_valid["LATITUDE"],  dtype=float),
-    )
-
-    osm_type_list, osm_lanes_list, osm_oneway_list = [], [], []
-    osm_speed_list, has_divider_list = [], []
-    for u, v, key in ne_edges:
-        edge = G.get_edge_data(u, v, key) or {}
-
-        def _get(k, default=None):
-            val = edge.get(k, default)
-            return val[0] if isinstance(val, list) else val
-
-        h_type = str(_get("highway", "residential"))
-        osm_type_list.append(h_type)
-        osm_lanes_list.append(_get("lanes"))
-        osm_oneway_list.append(bool(_get("oneway", False)))
-        osm_speed_list.append(_get("maxspeed"))
-        divider_raw = " ".join(
-            str(_get(k, ""))
-            for k in ["divider", "median", "separation", "barrier"]
-            if _get(k, "") not in (None, "")
-        ).lower()
-        has_divider_list.append(int(any(token in divider_raw for token in ["yes", "median", "divider", "barrier", "kerb"])))
-
-    def _infer_lanes(raw_lanes, h_type: str) -> int:
-        try:
-            return int(float(str(raw_lanes)))
-        except (ValueError, TypeError):
-            pass
-        h = str(h_type).lower()
-        if "motorway" in h: return 3
-        if "trunk"    in h: return 3
-        if "primary"  in h: return 2
-        return 1
-
-    def _infer_speed_limit_mph(raw_speed, h_type: str) -> float:
-        import re
-
-        text = str(raw_speed or "").lower()
-        nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", text)]
-        if nums:
-            speed = float(np.median(nums))
-            if "km" in text or "kph" in text:
-                speed *= 0.621371
-            return float(np.clip(round(speed / 5.0) * 5.0, 5.0, 70.0))
-
-        # OSM maxspeed 缺失时使用纽约市默认限速规则，而不是训练集统计量。
-        h = str(h_type).lower()
-        if "motorway" in h:
-            return 50.0
-        if "trunk" in h:
-            return 40.0
-        if "primary" in h or "secondary" in h:
-            return 30.0
-        return 25.0
-
-    df.loc[valid_mask, "OSM_TYPE"]       = osm_type_list
-    df.loc[valid_mask, "OSM_ONEWAY"]     = [int(b) for b in osm_oneway_list]
-    df.loc[valid_mask, "REAL_SPEED_LIMIT"] = [
-        _infer_speed_limit_mph(s, t) for s, t in zip(osm_speed_list, osm_type_list)
-    ]
-    df.loc[valid_mask, "HAS_DIVIDER"] = has_divider_list
-    df.loc[valid_mask, "INFERRED_LANES"] = [
-        _infer_lanes(l, t) for l, t in zip(osm_lanes_list, osm_type_list)
-    ]
-    tagged_speed = sum(str(x or "").strip() != "" for x in osm_speed_list)
-    print(f"  [OSM] maxspeed 标签覆盖 {tagged_speed:,}/{len(osm_speed_list):,} 行；缺失处使用 NYC/道路等级默认限速")
-
-    print("  [OSM] 路网特征提取完毕")
-    return df
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -508,6 +374,10 @@ def build_features(
     out["SEASON"]         = crash_dt.dt.month.fillna(1).astype(int).map(_season_from_month)
     out["DAY_OF_WEEK"]    = crash_dt.dt.dayofweek.fillna(0).astype(int)
     out["TIME_PERIOD"]    = hour.map(_time_period)
+    out["ROAD_H3_CELL"]   = [
+        _latlon_to_h3_cell(lat, lon)
+        for lat, lon in zip(out["LATITUDE"], out["LONGITUDE"])
+    ]
     # ── 新增字段（2026-04-26 重构）────────────────────────────────────────
     dow = crash_dt.dt.dayofweek.fillna(0).astype(int)
     out["IS_WEEKEND"]  = (dow >= 5).astype(int)
