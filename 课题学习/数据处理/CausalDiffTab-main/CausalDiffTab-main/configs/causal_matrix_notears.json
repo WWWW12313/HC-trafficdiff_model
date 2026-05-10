@@ -1,0 +1,124 @@
+{
+  "n_nodes": 42,
+  "n_edges": 24,
+  "density": 0.0139,
+  "roots": [
+    "LONGITUDE",
+    "INFERRED_LANES",
+    "SEASON",
+    "TIME_PERIOD",
+    "VEHICLE TYPE CODE 4",
+    "is_distracted",
+    "is_failure_to_yield",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",
+    "coco"
+  ],
+  "top_edges": [
+    [
+      "LONGITUDE",
+      "LATITUDE"
+    ],
+    [
+      "LONGITUDE",
+      "HAS_TRAFFIC_SIGNAL"
+    ],
+    [
+      "CRASH_TIME_COS",
+      "CRASH_TIME_SIN"
+    ],
+    [
+      "INFERRED_LANES",
+      "OSM_ONEWAY"
+    ],
+    [
+      "INFERRED_LANES",
+      "OSM_TYPE"
+    ],
+    [
+      "SEASON",
+      "TEMP_C"
+    ],
+    [
+      "TIME_PERIOD",
+      "CRASH_TIME_SIN"
+    ],
+    [
+      "TIME_PERIOD",
+      "CRASH_TIME_COS"
+    ],
+    [
+      "VEHICLE TYPE CODE 4",
+      "VEHICLE TYPE CODE 5"
+    ],
+    [
+      "VEHICLE TYPE CODE 4",
+      "TOTAL_VEHICLES"
+    ],
+    [
+      "VEHICLE TYPE CODE 4",
+      "IS_MULTI_VEHICLE"
+    ],
+    [
+      "VEHICLE TYPE CODE 5",
+      "TOTAL_VEHICLES"
+    ],
+    [
+      "is_distracted",
+      "is_following_too_closely"
+    ],
+    [
+      "is_failure_to_yield",
+      "is_following_too_closely"
+    ],
+    [
+      "NUMBER_OF_CYCLIST_INJURED_BIN",
+      "VEHICLE TYPE CODE 2"
+    ],
+    [
+      "NUMBER_OF_CYCLIST_INJURED_BIN",
+      "is_pedestrian_related"
+    ],
+    [
+      "TOTAL_VEHICLES",
+      "VEHICLE TYPE CODE 3"
+    ],
+    [
+      "TOTAL_VEHICLES",
+      "IS_MULTI_VEHICLE"
+    ],
+    [
+      "IS_MULTI_VEHICLE",
+      "VEHICLE TYPE CODE 2"
+    ],
+    [
+      "IS_MULTI_VEHICLE",
+      "VEHICLE TYPE CODE 3"
+    ],
+    [
+      "IS_MULTI_VEHICLE",
+      "NUMBER_OF_PEDESTRIANS_INJURED_BIN"
+    ],
+    [
+      "HAS_TRAFFIC_SIGNAL",
+      "DIST_TO_SIGNAL_M"
+    ],
+    [
+      "coco",
+      "prcp"
+    ],
+    [
+      "coco",
+      "WEATHER_CONDITION"
+    ]
+  ],
+  "elapsed_seconds": 245.3,
+  "config": {
+    "method": "linear",
+    "backend": "scipy",
+    "lambda1": 0.1,
+    "max_iter": 100,
+    "w_threshold": 0.1,
+    "max_samples": 20000,
+    "seed": 42
+  }
+}

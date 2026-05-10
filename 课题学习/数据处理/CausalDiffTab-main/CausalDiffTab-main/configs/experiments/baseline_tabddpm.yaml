@@ -1,0 +1,10 @@
+# CausalDiffTab experiment config (auto-generated)
+model_name: baseline_tabddpm
+experiment_id: baseline_tabddpm
+lambda_causal: 0.0
+use_causal_masks: false
+hierarchical: false
+description: 无因果掩码、无分层：仅 Stage3 全表无条件生成（TabDDPM 式基线）
+sampling:
+  mode: unconditional
+  num_samples: null

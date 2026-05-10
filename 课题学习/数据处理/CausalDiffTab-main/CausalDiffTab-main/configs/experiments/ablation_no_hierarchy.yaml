@@ -1,0 +1,10 @@
+# CausalDiffTab experiment config (auto-generated)
+model_name: ablation_no_hierarchy
+experiment_id: ablation_no_hierarchy
+lambda_causal: 1.0
+use_causal_masks: true
+hierarchical: false
+description: 因果掩码 + 正则，但无分层：仅 Stage3 全 47 维无条件一步生成
+sampling:
+  mode: unconditional
+  num_samples: null
