@@ -33,18 +33,19 @@ def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: 
     W = W.copy()
     idx = {name: i for i, name in enumerate(feature_names)}
 
-    time_nodes = set(groups.get("stage1_continuous", [])) | set(groups.get("stage1_categorical", []))
-    spatial_nodes = {"LATITUDE", "LONGITUDE", "ROAD_H3_CELL"}
-    time_nodes -= spatial_nodes
-    weather_nodes = {"TEMP_C", "prcp", "WIND_SPEED_KMH", "coco", "WEATHER_CONDITION"}
+    # 2026-05-16 新版：明确声明新 schema 节点集合，不再动态依赖 column_groups
+    spatial_nodes = {"LATITUDE", "LONGITUDE"}   # ROAD_H3_CELL 已退役
+    time_nodes = {
+        "CRASH_TIME_SIN", "CRASH_TIME_COS",
+        "SEASON", "IS_WEEKEND", "IS_AM_PEAK", "IS_PM_PEAK",
+        # Legacy 字段如果仍在矩阵中也统一添加禁止边
+        "DAY_OF_WEEK", "TIME_PERIOD",
+    }
+    weather_nodes = {"TEMP_C", "prcp", "WIND_SPEED_KMH", "WEATHER_CONDITION"}  # coco 已退役
     road_nodes = {
-        "DIST_TO_SIGNAL_M",
-        "REAL_SPEED_LIMIT",
-        "INFERRED_LANES",
-        "HAS_TRAFFIC_SIGNAL",
-        "OSM_ONEWAY",
-        "HAS_DIVIDER",
-        "OSM_TYPE",
+        "DIST_TO_SIGNAL_M", "INFERRED_LANES",
+        "HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY", "OSM_TYPE",
+        # REAL_SPEED_LIMIT / HAS_DIVIDER 已退役（2026-05-16）
     }
     stage3_nodes = set(groups.get("stage3_features", [])) | set(groups.get("stage3_categorical", []))
     context_nodes = set(groups.get("stage1_features", [])) | set(groups.get("stage2_features", []))
@@ -76,10 +77,14 @@ def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: 
     removed += zero_edges(weather_nodes, road_nodes)
     removed += zero_edges(stage3_nodes, context_nodes)
     removed += zero_edges(factor_nodes | injury_nodes, vehicle_nodes)
+    # 2026-05-16 新增：禁止 Stage3 反向指向 Stage1/Stage2
+    removed += zero_edges(stage3_nodes, time_nodes)
+    removed += zero_edges(stage3_nodes, spatial_nodes)
+    removed += zero_edges(injury_nodes, factor_nodes)
 
     added = 0
     added += keep_edges(spatial_nodes, road_nodes, 1.0)
-    added += keep_edges({"ROAD_H3_CELL"}, stage3_nodes, 0.5)
+    # ROAD_H3_CELL keep_edges 已删除（2026-05-16）
     added += keep_edges(time_nodes, weather_nodes, 1.0)
     added += keep_edges(weather_nodes | road_nodes, factor_nodes, 0.5)
     added += keep_edges(time_nodes, factor_nodes, 1.0)
@@ -93,31 +98,77 @@ def _apply_domain_causal_rules(W: np.ndarray, feature_names: list[str], groups: 
     return W
 
 
-def _align_causal_matrix_to_features(W: np.ndarray, feature_names: list[str]) -> np.ndarray:
-    """Align legacy causal matrices to the active feature schema by name.
+##############################################################################
+# 已知宏观骨架矩阵的列名顺序（build_macro_causal_skeleton.py 生成的 37 列）
+# 用于当矩阵列数与训练数据列数不一致时的通用名称对齐。
+##############################################################################
+_MACRO_SKELETON_37_COLS = [
+    # 连续 (0-8)
+    "LATITUDE", "LONGITUDE", "CRASH_TIME_SIN", "CRASH_TIME_COS",
+    "TEMP_C", "prcp", "WIND_SPEED_KMH", "DIST_TO_SIGNAL_M", "INFERRED_LANES",
+    # Stage1 离散 (9-12)
+    "SEASON", "IS_WEEKEND", "IS_AM_PEAK", "IS_PM_PEAK",
+    # Stage2 离散 (13-16)
+    "HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY", "WEATHER_CONDITION", "OSM_TYPE",
+    # 宏观事故类型 (17-20)
+    "is_rear_end", "is_lane_change_related", "is_pedestrian_involved", "is_cyclist_involved",
+    # 车辆类型 (21-28)
+    "is_sedan", "is_suv", "is_taxi", "is_truck",
+    "is_bus", "is_motorcycle", "is_bicycle", "is_other_vehicle",
+    # 伤亡二元 (29-34)
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN", "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+    "NUMBER_OF_CYCLIST_INJURED_BIN",     "NUMBER_OF_CYCLIST_KILLED_BIN",
+    "NUMBER_OF_MOTORIST_INJURED_BIN",    "NUMBER_OF_MOTORIST_KILLED_BIN",
+    # 规模 (35-36)
+    "TOTAL_VEHICLES", "IS_MULTI_VEHICLE",
+]
 
-    Older matrices include REAL_SPEED_LIMIT between DIST_TO_SIGNAL_M and
-    INFERRED_LANES. After dropping that field, positional slicing would shift
-    every downstream column by one, so we explicitly remove the retired slot.
+
+def _align_causal_matrix_to_features(W: np.ndarray, feature_names: list[str]) -> np.ndarray:
+    """Align causal matrix to the active feature schema by name.
+
+    Supports three cases:
+    1. Exact shape match → return as-is.
+    2. Known 37-col macro skeleton matrix vs. arbitrary N-col data schema →
+       name-based alignment: extract common features from matrix, insert zeros for
+       features in data but not in matrix (e.g. behavior factors).
+    3. Legacy positional alignment for old matrices with retired features
+       (REAL_SPEED_LIMIT, HAS_DIVIDER, coco, DAY_OF_WEEK, TIME_PERIOD, ROAD_H3_CELL,
+        is_pickup, is_van).
     """
     n_features = len(feature_names)
     if W.shape == (n_features, n_features):
         return W
 
-    retired_features = ["REAL_SPEED_LIMIT"]
+    # ── Case 2: 37-col macro skeleton  ───────────────────────────────────────
+    # 当矩阵为已知 37 列骨架，而训练数据可能包含行为因子（45 列）等不同列集时，
+    # 使用列名交集提取子矩阵，其余位置填零。
+    if W.shape[0] <= 50 and set(_MACRO_SKELETON_37_COLS) & set(feature_names):
+        # 确定矩阵实际使用的列名（不超过矩阵行数）
+        matrix_cols = _MACRO_SKELETON_37_COLS[:W.shape[0]]
+        common = [c for c in feature_names if c in matrix_cols]
+        if common:
+            aligned = np.zeros((n_features, n_features), dtype=np.float32)
+            old_idx = [matrix_cols.index(c) for c in common]
+            new_idx = [feature_names.index(c) for c in common]
+            aligned[np.ix_(new_idx, new_idx)] = W[np.ix_(old_idx, old_idx)].astype(np.float32)
+            added = [c for c in feature_names if c not in matrix_cols]
+            dropped = [c for c in matrix_cols if c not in feature_names]
+            print(
+                f"[causal_align] name-based W {W.shape} -> {aligned.shape}; "
+                f"common={len(common)}, added_zero={len(added)}, dropped_from_matrix={len(dropped)}"
+            )
+            if dropped:
+                print(f"  dropped_from_matrix: {dropped}")
+            if added:
+                print(f"  added_zero (no causal constraint): {added}")
+            return aligned
+
+    # ── Case 3: Legacy positional alignment ───────────────────────────────────
+    retired_features = ["REAL_SPEED_LIMIT", "HAS_DIVIDER", "coco",
+                        "DAY_OF_WEEK", "TIME_PERIOD", "ROAD_H3_CELL",
+                        "is_pickup", "is_van"]
     legacy_features = list(feature_names)
-    newly_added_features = ["ROAD_H3_CELL"]
-    legacy_without_added = [name for name in legacy_features if name not in newly_added_features]
-    if W.shape == (len(legacy_without_added), len(legacy_without_added)):
-        aligned = np.zeros((n_features, n_features), dtype=np.float32)
-        old_idx = [legacy_without_added.index(name) for name in legacy_without_added]
-        new_idx = [feature_names.index(name) for name in legacy_without_added]
-        aligned[np.ix_(new_idx, new_idx)] = W[np.ix_(old_idx, old_idx)].astype(np.float32)
-        print(
-            f"[causal_align] expanded legacy W {W.shape} -> {aligned.shape}; "
-            f"added_zero_features={newly_added_features}"
-        )
-        return aligned
 
     for retired in retired_features:
         if retired not in legacy_features:

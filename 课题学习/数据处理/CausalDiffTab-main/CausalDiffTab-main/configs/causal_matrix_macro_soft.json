@@ -1,9 +1,9 @@
 {
-  "generated_at": "20260427_111443",
+  "generated_at": "20260516_010719",
   "description": "宏观因果骨架（7组），适配 2024→2025 迁移学习",
   "matrix_shape": [
-    38,
-    38
+    37,
+    37
   ],
   "feature_names": [
     "LATITUDE",
@@ -31,11 +31,10 @@
     "is_suv",
     "is_taxi",
     "is_truck",
-    "is_pickup",
     "is_bus",
-    "is_van",
     "is_motorcycle",
     "is_bicycle",
+    "is_other_vehicle",
     "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
     "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
     "NUMBER_OF_CYCLIST_INJURED_BIN",
@@ -45,12 +44,12 @@
     "TOTAL_VEHICLES",
     "IS_MULTI_VEHICLE"
   ],
-  "n_features": 38,
+  "n_features": 37,
   "n_continuous": 9,
-  "n_categorical": 29,
-  "total_edges": 226,
-  "strong_edges": 112,
-  "weak_edges": 114,
+  "n_categorical": 28,
+  "total_edges": 214,
+  "strong_edges": 106,
+  "weak_edges": 108,
   "strength_tiers": {
     "strong": 1.0,
     "weak": 0.5,
@@ -149,11 +148,10 @@
         "is_suv",
         "is_taxi",
         "is_truck",
-        "is_pickup",
         "is_bus",
-        "is_van",
         "is_motorcycle",
-        "is_bicycle"
+        "is_bicycle",
+        "is_other_vehicle"
       ],
       "targets": [
         "is_rear_end",
@@ -175,11 +173,10 @@
         "is_suv",
         "is_taxi",
         "is_truck",
-        "is_pickup",
         "is_bus",
-        "is_van",
         "is_motorcycle",
-        "is_bicycle"
+        "is_bicycle",
+        "is_other_vehicle"
       ],
       "targets": [
         "NUMBER_OF_PEDESTRIANS_INJURED_BIN",

@@ -149,15 +149,18 @@ SEASON_MAP = {
 # ============================================================
 
 STAGE1_CONTINUOUS = ["LATITUDE", "LONGITUDE", "CRASH_TIME_SIN", "CRASH_TIME_COS"]
-STAGE1_CATEGORICAL = ["SEASON", "DAY_OF_WEEK", "TIME_PERIOD", "ROAD_H3_CELL"]
+# 2026-05-16 重构：用 IS_WEEKEND/IS_AM_PEAK/IS_PM_PEAK 替代 DAY_OF_WEEK/TIME_PERIOD/ROAD_H3_CELL
+STAGE1_CATEGORICAL = ["SEASON", "IS_WEEKEND", "IS_AM_PEAK", "IS_PM_PEAK"]
 
 STAGE2_CONTINUOUS = [
     "TEMP_C", "prcp", "WIND_SPEED_KMH",
-    "DIST_TO_SIGNAL_M", "REAL_SPEED_LIMIT", "INFERRED_LANES",
+    "DIST_TO_SIGNAL_M", "INFERRED_LANES",
+    # REAL_SPEED_LIMIT 已退役：数据质量差，信息被 INFERRED_LANES/OSM_TYPE 覆盖（2026-05-16）
 ]
 STAGE2_CATEGORICAL = [
-    "HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY", "HAS_DIVIDER",
-    "coco", "WEATHER_CONDITION", "OSM_TYPE",
+    "HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY", "WEATHER_CONDITION", "OSM_TYPE",
+    # HAS_DIVIDER 退役：跨年份稳定性差（2026-05-16）
+    # coco 退役：原始 WMO 码，映射为 WEATHER_CONDITION 后更稳定（2026-05-16）
 ]
 
 VEHICLE_TYPE_INDICATOR_NAMES = list(VEHICLE_TYPE_GROUPS.keys()) + [VEHICLE_OTHER_INDICATOR_NAME]
@@ -234,10 +237,15 @@ def process_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
 
     df["SEASON"] = crash_dt.dt.month.map(SEASON_MAP)
 
+    # Legacy：保留生成但不进入 STAGE1_CATEGORICAL（用于下游兼容脚本）
     df["DAY_OF_WEEK"] = crash_dt.dt.dayofweek  # 0=Mon ... 6=Sun
-
     hours = crash_dt.dt.hour
     df["TIME_PERIOD"] = hours.apply(_get_time_period)
+
+    # 2026-05-16 新版时间语义字段（替换 DAY_OF_WEEK / TIME_PERIOD / ROAD_H3_CELL）
+    df["IS_WEEKEND"] = (crash_dt.dt.dayofweek >= 5).astype(np.int8)
+    df["IS_AM_PEAK"] = ((hours >= 7) & (hours <= 9)).astype(np.int8)
+    df["IS_PM_PEAK"] = ((hours >= 17) & (hours <= 19)).astype(np.int8)
 
     minutes_of_day = hours * 60 + crash_dt.dt.minute  # 0-1439
     frac = minutes_of_day / 1440.0  # 归一化到 [0, 1)

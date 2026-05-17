@@ -16,10 +16,10 @@
 新版字段（38 列）顺序：
   连续 (0-8):   LATITUDE LONGITUDE CRASH_TIME_SIN CRASH_TIME_COS
                 TEMP_C prcp WIND_SPEED_KMH DIST_TO_SIGNAL_M INFERRED_LANES
-  离散 (9-37):  SEASON IS_WEEKEND IS_AM_PEAK IS_PM_PEAK
+  离散 (9-36):  SEASON IS_WEEKEND IS_AM_PEAK IS_PM_PEAK
                 HAS_TRAFFIC_SIGNAL OSM_ONEWAY WEATHER_CONDITION OSM_TYPE
                 is_rear_end is_lane_change_related is_pedestrian_involved is_cyclist_involved
-                is_sedan is_suv is_taxi is_truck is_pickup is_bus is_van is_motorcycle is_bicycle
+                is_sedan is_suv is_taxi is_truck is_bus is_motorcycle is_bicycle is_other_vehicle
                 NUMBER_OF_PEDESTRIANS_INJURED_BIN NUMBER_OF_PEDESTRIANS_KILLED_BIN
                 NUMBER_OF_CYCLIST_INJURED_BIN NUMBER_OF_CYCLIST_KILLED_BIN
                 NUMBER_OF_MOTORIST_INJURED_BIN NUMBER_OF_MOTORIST_KILLED_BIN
@@ -55,17 +55,18 @@ CATEGORICAL = [
     "SEASON", "IS_WEEKEND", "IS_AM_PEAK", "IS_PM_PEAK",
     "HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY", "WEATHER_CONDITION", "OSM_TYPE",
     "is_rear_end", "is_lane_change_related", "is_pedestrian_involved", "is_cyclist_involved",
-    "is_sedan", "is_suv", "is_taxi", "is_truck", "is_pickup",
-    "is_bus", "is_van", "is_motorcycle", "is_bicycle",
+    # 2026-05-16: is_pickup/is_van 并入 is_other_vehicle，与 data_processor.py 对齐
+    "is_sedan", "is_suv", "is_taxi", "is_truck",
+    "is_bus", "is_motorcycle", "is_bicycle", "is_other_vehicle",
     "NUMBER_OF_PEDESTRIANS_INJURED_BIN", "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
     "NUMBER_OF_CYCLIST_INJURED_BIN",     "NUMBER_OF_CYCLIST_KILLED_BIN",
     "NUMBER_OF_MOTORIST_INJURED_BIN",    "NUMBER_OF_MOTORIST_KILLED_BIN",
     "TOTAL_VEHICLES", "IS_MULTI_VEHICLE",
 ]
 
-ALL_COLS = CONTINUOUS + CATEGORICAL   # 38 列
+ALL_COLS = CONTINUOUS + CATEGORICAL   # 37 列
 COL_IDX  = {c: i for i, c in enumerate(ALL_COLS)}
-N        = len(ALL_COLS)              # 38
+N        = len(ALL_COLS)              # 37
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 节点组定义
@@ -102,9 +103,10 @@ ACCIDENT_TYPE_NODES = _idx(
 )
 
 # 车辆类型节点
+# 2026-05-16: is_pickup/is_van 已并入 is_other_vehicle
 VEHICLE_TYPE_NODES = _idx(
-    "is_sedan", "is_suv", "is_taxi", "is_truck", "is_pickup",
-    "is_bus", "is_van", "is_motorcycle", "is_bicycle",
+    "is_sedan", "is_suv", "is_taxi", "is_truck",
+    "is_bus", "is_motorcycle", "is_bicycle", "is_other_vehicle",
 )
 
 # 伤亡结果节点

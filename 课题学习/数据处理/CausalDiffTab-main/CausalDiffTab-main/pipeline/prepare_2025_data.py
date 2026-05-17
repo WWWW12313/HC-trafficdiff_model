@@ -372,13 +372,14 @@ def build_features(
     out["CRASH_TIME_SIN"] = np.sin(ang)
     out["CRASH_TIME_COS"] = np.cos(ang)
     out["SEASON"]         = crash_dt.dt.month.fillna(1).astype(int).map(_season_from_month)
-    out["DAY_OF_WEEK"]    = crash_dt.dt.dayofweek.fillna(0).astype(int)
-    out["TIME_PERIOD"]    = hour.map(_time_period)
-    out["ROAD_H3_CELL"]   = [
+    # 2026-05-16: DAY_OF_WEEK / TIME_PERIOD / ROAD_H3_CELL 退出 out，不进入训练特征
+    # （保留局部变量供下游兼容脚本使用，但不写入 out DataFrame）
+    _dow_legacy      = crash_dt.dt.dayofweek.fillna(0).astype(int)
+    _time_pd_legacy  = hour.map(_time_period)
+    _h3_legacy       = [
         _latlon_to_h3_cell(lat, lon)
         for lat, lon in zip(out["LATITUDE"], out["LONGITUDE"])
     ]
-    # ── 新增字段（2026-04-26 重构）────────────────────────────────────────
     dow = crash_dt.dt.dayofweek.fillna(0).astype(int)
     out["IS_WEEKEND"]  = (dow >= 5).astype(int)
     out["IS_AM_PEAK"]  = ((hour >= 7) & (hour <= 9)).astype(int)
@@ -632,10 +633,10 @@ def main() -> None:
     print(f"  crash CSV   : {raw_path.name}")
     print(f"  years       : {args.years}")
     print(f"  n_sample    : {args.n_sample}")
-    print(f"  OSM graphml : {'✅ 存在' if graphml_path.exists() else '⚠ 未找到（将用 median fallback）'}")
-    print(f"  OSM signals : {'✅ 存在' if signals_path.exists() else '— 未找到（从路网提取）'}")
+    print(f"  OSM graphml : {'[OK] 存在' if graphml_path.exists() else '[WARN] 未找到（将用 median fallback）'}")
+    print(f"  OSM signals : {'[OK] 存在' if signals_path.exists() else '[-] 未找到（从路网提取）'}")
     for wp in weather_paths:
-        print(f"  weather     : {wp.name}  {'✅' if wp.exists() else '⚠ 未找到'}")
+        print(f"  weather     : {wp.name}  {'[OK]' if wp.exists() else '[WARN] 未找到'}")
     print()
 
     # ── 加载原始数据 ──────────────────────────────────────────────────────────
@@ -694,11 +695,13 @@ def main() -> None:
     if len(df_train) > 0:
         _describe_speed_distribution(df_train, "train")
         df_train.to_csv(out_dir / "train.csv", index=False)
-        written_train = pd.read_csv(out_dir / "train.csv", usecols=["REAL_SPEED_LIMIT"])
-        _describe_speed_distribution(written_train, "written train")
+        if "REAL_SPEED_LIMIT" in df_train.columns:
+            written_train = pd.read_csv(out_dir / "train.csv", usecols=["REAL_SPEED_LIMIT"])
+            _describe_speed_distribution(written_train, "written train")
     df_test.to_csv(out_dir / "test.csv", index=False)
-    written_test = pd.read_csv(out_dir / "test.csv", usecols=["REAL_SPEED_LIMIT"])
-    _describe_speed_distribution(written_test, "written test")
+    if "REAL_SPEED_LIMIT" in df_test.columns:
+        written_test = pd.read_csv(out_dir / "test.csv", usecols=["REAL_SPEED_LIMIT"])
+        _describe_speed_distribution(written_test, "written test")
 
     # 同时写一份到 results/，供 evaluate_postcovid_transfer.py 使用
     # 文件名包含年份和实际行数，便于追踪
