@@ -33,6 +33,12 @@ cache/
 **/原始数据集/
 **/暂时不用（rubbish）/
 
+# Large binary / data files (must never be committed)
+*.pbf
+*.osm
+*.h5
+*.hdf5
+
 # Large/generated file types
 *.csv
 *.npy
