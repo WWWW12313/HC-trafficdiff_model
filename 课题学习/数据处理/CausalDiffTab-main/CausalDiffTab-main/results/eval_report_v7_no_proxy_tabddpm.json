@@ -1,0 +1,81 @@
+{
+  "generated_utc": "20260519_151243",
+  "primary_metrics_profile": "auto",
+  "two_tier_methodology": {
+    "structural_layer": [
+      "cmi_abs_error_mean",
+      "shd_normalized"
+    ],
+    "task_layer": [
+      "tstr_avg_score",
+      "tstr_r2",
+      "tstr_accuracy"
+    ]
+  },
+  "real_test": "data\\nyc_crash_2024_v2\\test.csv",
+  "task_type": "regression",
+  "target_col": "NUMBER OF PERSONS INJURED",
+  "file_glob": "baseline_tabddpm_full.csv",
+  "joint_metrics_enabled": false,
+  "joint_specs": [],
+  "rows": [
+    {
+      "file": "baseline_tabddpm_full.csv",
+      "n_rows": 10000,
+      "mean_wasserstein_numeric": 0.784472,
+      "mean_js_categorical": 0.014067,
+      "tstr_excluded_proxy_cols_count": 8,
+      "tstr_feature_cols_used": 24,
+      "tstr_avg_score": 0.393443,
+      "tstr_best_model": "xgboost",
+      "tstr_best_model_score": 0.396222,
+      "tstr_r2": -0.008783,
+      "tstr_mse": 0.742967,
+      "tstr_mae": 0.626198
+    }
+  ],
+  "ranked_summary": [],
+  "tstr_benchmark_details": {
+    "baseline_tabddpm_full.csv": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.39344313709177503,
+        "best_model": "xgboost",
+        "best_model_avg_score": 0.3962218886018256,
+        "mean_r2": -0.02979913471191183,
+        "mean_mse": 0.7584452017121609,
+        "mean_mae": 0.6351366621840523
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.3962218886018256,
+          "r2": -0.008782625198364258,
+          "mse": 0.7429665923118591,
+          "mae": 0.6261981725692749,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.39462063617593257,
+          "r2": -0.01544222587493227,
+          "mse": 0.7478713941493916,
+          "mae": 0.6346882529820579,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.38948688649756696,
+          "r2": -0.06517255306243896,
+          "mse": 0.7844976186752319,
+          "mae": 0.644523561000824,
+          "error": ""
+        }
+      ]
+    }
+  }
+}

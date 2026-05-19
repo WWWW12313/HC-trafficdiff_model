@@ -76,6 +76,7 @@ def calibrate(
     target_col: str,
     shrink: float,
     use_relations: set[str],
+    preserve_zero_target: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     specs = [s for s in _build_specs(groups) if s.relation in use_relations]
     real_global, real_dev = _fit_group_deviations(real_df, specs, target_col)
@@ -99,6 +100,8 @@ def calibrate(
 
     relation_mean = relation_correction / np.maximum(relation_counts, 1.0)
     y_cal = y + float(shrink) * (global_correction + relation_mean)
+    if preserve_zero_target:
+        y_cal[y <= 0] = 0.0
     y_cal = np.clip(y_cal, 0.0, max(20.0, float(np.nanmax(_to_numeric(real_df[target_col]).fillna(0.0)))))
 
     out = syn_df.copy()
@@ -108,7 +111,10 @@ def calibrate(
         "real_global_mean": round(real_global, 6),
         "synthetic_global_mean_before": round(syn_global, 6),
         "synthetic_global_mean_after": round(float(np.mean(y_cal)), 6),
+        "synthetic_zero_rate_before": round(float(np.mean(y <= 0)), 6),
+        "synthetic_zero_rate_after": round(float(np.mean(y_cal <= 0)), 6),
         "shrink": shrink,
+        "preserve_zero_target": preserve_zero_target,
         "n_specs_used": len(used_specs),
         "specs_used": used_specs,
     }
@@ -123,6 +129,7 @@ def main() -> None:
     parser.add_argument("--groups_json", default="data/processed/column_groups.json")
     parser.add_argument("--target_col", default="NUMBER OF PERSONS INJURED")
     parser.add_argument("--shrink", type=float, default=0.8)
+    parser.add_argument("--preserve_zero_target", action="store_true")
     parser.add_argument(
         "--relations",
         default="weather_to_injury,road_to_injury,vehicle_to_injury,crash_type_to_injury",
@@ -138,7 +145,10 @@ def main() -> None:
     real_df = pd.read_csv(real_path, low_memory=False)
     syn_df = pd.read_csv(syn_path, low_memory=False)
     use_relations = {x.strip() for x in args.relations.split(",") if x.strip()}
-    out_df, metadata = calibrate(real_df, syn_df, groups, args.target_col, args.shrink, use_relations)
+    out_df, metadata = calibrate(
+        real_df, syn_df, groups, args.target_col, args.shrink, use_relations,
+        preserve_zero_target=args.preserve_zero_target,
+    )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out_path, index=False)

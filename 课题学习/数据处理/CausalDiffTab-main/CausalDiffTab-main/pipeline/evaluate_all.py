@@ -218,6 +218,18 @@ def _prepare_xy(
     return X, y
 
 
+def _proxy_outcome_columns(columns: List[str]) -> List[str]:
+    """Columns that are target descendants/proxies rather than causal parents."""
+    proxy_cols = []
+    for col in columns:
+        name = str(col).upper()
+        if "INJURED_BIN" in name or "KILLED_BIN" in name:
+            proxy_cols.append(col)
+        elif name in {"TOTAL_VEHICLES", "IS_MULTI_VEHICLE"}:
+            proxy_cols.append(col)
+    return proxy_cols
+
+
 def _load_info(info_json: Optional[str] = None) -> dict:
     p = Path(info_json) if info_json else CDT_ROOT / "data" / "nyc_crash" / "info.json"
     if not p.is_absolute():
@@ -456,6 +468,11 @@ def main():
         ),
     )
     parser.add_argument(
+        "--exclude_proxy_outcomes",
+        action="store_true",
+        help="TSTR 时排除伤亡派生/车辆上下文代理列，评估更接近因果父变量的预测效用",
+    )
+    parser.add_argument(
         "--output_tag",
         type=str,
         default=None,
@@ -551,6 +568,12 @@ def main():
 
         try:
             common = [c for c in syn.columns if c in real_df.columns and c != target_col]
+            excluded_proxy_cols: List[str] = []
+            if args.exclude_proxy_outcomes:
+                excluded_proxy_cols = _proxy_outcome_columns(common)
+                common = [c for c in common if c not in set(excluded_proxy_cols)]
+                row["tstr_excluded_proxy_cols_count"] = len(excluded_proxy_cols)
+                row["tstr_feature_cols_used"] = len(common)
             if target_col not in syn.columns or target_col not in real_df.columns:
                 raise ValueError(f"目标列 {target_col} 在合成集或测试集中缺失")
 
