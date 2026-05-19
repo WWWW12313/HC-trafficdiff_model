@@ -34,6 +34,7 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
             causal_weight_max: float = 1.0,    # 新增参数
             causal_warmup_steps: int = 4000,   # 新增参数
             causal_start_step: int = 0,
+            causal_mask_mode: str = "allowed_penalty",
             **kwargs
         ):
 
@@ -73,6 +74,7 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         self.causal_weight_max = causal_weight_max
         self.causal_warmup_steps = causal_warmup_steps
         self.causal_start_step = causal_start_step
+        self.causal_mask_mode = causal_mask_mode
         self.ema_loss = None
         self.w_num = 0.0
         self.w_cat = 0.0
@@ -172,6 +174,25 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
     #     total_loss = causal_consistency * weight
     
     #     return total_loss
+    def _effective_causal_mask(self, is_categorical=False):
+        mask = self.cat_causal_mask if is_categorical else self.num_causal_mask
+        if mask is None:
+            return None
+        if self.causal_mask_mode == "allowed_penalty":
+            return mask
+        if self.causal_mask_mode != "forbidden_penalty":
+            raise ValueError(f"Unsupported causal_mask_mode: {self.causal_mask_mode}")
+
+        valid = torch.ones_like(mask)
+        if is_categorical:
+            for slice_i in self.slices_for_classes_with_mask:
+                idx = torch.as_tensor(slice_i, dtype=torch.long, device=mask.device)
+                valid[idx[:, None], idx[None, :]] = 0.0
+        else:
+            valid.fill_diagonal_(0.0)
+        allowed = (mask > 0).to(mask.dtype)
+        return valid * (1.0 - allowed)
+
     def _causal_regularization_loss(self, pred_x, x_t, noise, sigma, is_categorical=False, current_step=0):
     # """
     # 通用因果正则化损失（支持数值型和类别型）
@@ -205,10 +226,12 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         # 计算因果方向导数
             grad_matrix = torch.einsum('bi,bj->bij', noise_pred, noise_pred)
     
-    # 应用因果掩码（原有逻辑保持不变）
-        mask = self.cat_causal_mask.unsqueeze(0) if is_categorical else self.num_causal_mask.unsqueeze(0)
-        masked_grad = grad_matrix * mask
-        causal_consistency = masked_grad.mean()
+    # 应用因果掩码；默认保留旧语义，新实验可改为只惩罚未保留的跨特征边。
+        mask = self._effective_causal_mask(is_categorical=is_categorical)
+        if mask is None or torch.sum(mask) <= 0:
+            return torch.tensor(0.0, device=pred_x.device)
+        masked_grad = grad_matrix * mask.unsqueeze(0)
+        causal_consistency = masked_grad.sum() / (mask.sum() * grad_matrix.shape[0]).clamp_min(1.0)
         total_loss = causal_consistency * 1
         return total_loss
     

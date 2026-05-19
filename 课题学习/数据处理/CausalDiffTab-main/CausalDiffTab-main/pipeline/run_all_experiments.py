@@ -46,6 +46,7 @@ def _run_train_stage(
     mask_subdir: str = "causal_masks",
     causal_start_frac: float = 0.0,
     causal_warmup_frac: float = 0.2,
+    causal_mask_mode: str = "allowed_penalty",
 ) -> None:
     cmd = [
         sys.executable,
@@ -66,6 +67,8 @@ def _run_train_stage(
         str(causal_start_frac),
         "--causal_warmup_frac",
         str(causal_warmup_frac),
+        "--causal_mask_mode",
+        causal_mask_mode,
     ]
     cmd.extend(["--dataname", dataname])
     if not use_causal_masks:
@@ -146,6 +149,7 @@ def main():
             "macro_soft_lam005_v2",
             "macro_soft_lam01_v2",
             "macro_sparse_anneal_v2",
+            "macro_sparse_forbidden_v2",
         ],
         help="与 configs/experiments/*.yaml 中 model_name 一致",
     )
@@ -216,6 +220,7 @@ def main():
     mask_subdir = str(cfg.get("mask_subdir", "causal_masks"))
     causal_start_frac = float(cfg.get("causal_start_frac", 0.0))
     causal_warmup_frac = float(cfg.get("causal_warmup_frac", 0.2))
+    causal_mask_mode = str(cfg.get("causal_mask_mode", "allowed_penalty"))
     sampling = cfg.get("sampling") or {}
     mode = sampling.get("mode", "unconditional")
 
@@ -229,16 +234,19 @@ def main():
         if hierarchical:
             _run_train_stage(
                 1, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname,
-                mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac
+                mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac,
+                causal_mask_mode=causal_mask_mode
             )
         if train_stage2:
             _run_train_stage(
                 2, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname,
-                mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac
+                mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac,
+                causal_mask_mode=causal_mask_mode
             )
         _run_train_stage(
             3, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname,
-            mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac
+            mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac,
+            causal_mask_mode=causal_mask_mode
         )
 
     if args.skip_sample:

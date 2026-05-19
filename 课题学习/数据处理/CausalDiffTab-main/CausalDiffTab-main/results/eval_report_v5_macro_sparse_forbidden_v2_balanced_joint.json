@@ -1,0 +1,102 @@
+{
+  "generated_utc": "20260519_141138",
+  "primary_metrics_profile": "full",
+  "two_tier_methodology": {
+    "structural_layer": [
+      "cmi_abs_error_mean",
+      "shd_normalized"
+    ],
+    "task_layer": [
+      "tstr_avg_score",
+      "tstr_r2",
+      "tstr_accuracy"
+    ]
+  },
+  "real_test": "data\\nyc_crash_2024_v2\\test.csv",
+  "task_type": "regression",
+  "target_col": "NUMBER OF PERSONS INJURED",
+  "file_glob": "macro_sparse_forbidden_v2_balanced.csv",
+  "joint_metrics_enabled": true,
+  "joint_specs": [
+    {
+      "x_col": "LATITUDE",
+      "y_col": "LONGITUDE",
+      "cond_cols": [
+        "TEMP_C",
+        "prcp"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "file": "macro_sparse_forbidden_v2_balanced.csv",
+      "n_rows": 10000,
+      "mean_wasserstein_numeric": 0.210084,
+      "mean_js_categorical": 0.010758,
+      "cmi_abs_error_mean": 0.037197,
+      "cmi_rel_error_mean": 0.138777,
+      "shd": NaN,
+      "shd_normalized": NaN,
+      "tstr_avg_score": 0.682873,
+      "tstr_best_model": "random_forest",
+      "tstr_best_model_score": 0.694227,
+      "tstr_r2": 0.514117,
+      "tstr_mse": 0.357852,
+      "tstr_mae": 0.258388
+    }
+  ],
+  "ranked_summary": [
+    {
+      "rank": 1,
+      "file": "macro_sparse_forbidden_v2_balanced.csv",
+      "composite_score": 0.0,
+      "cmi_abs_error_mean": 0.037197,
+      "shd_normalized": NaN,
+      "tstr_avg_score": 0.682873,
+      "tstr_r2_or_accuracy": 0.514117
+    }
+  ],
+  "tstr_benchmark_details": {
+    "macro_sparse_forbidden_v2_balanced.csv": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.6828728242523382,
+        "best_model": "random_forest",
+        "best_model_avg_score": 0.6942271867971517,
+        "mean_r2": 0.520927243536533,
+        "mean_mse": 0.3528362168978096,
+        "mean_mae": 0.2689907817788715
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.6817472989934501,
+          "r2": 0.5141173005104065,
+          "mse": 0.35785171389579773,
+          "mae": 0.258388489484787,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.6942271867971517,
+          "r2": 0.5312502774769694,
+          "mse": 0.3452333373160483,
+          "mae": 0.23752295039528448,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.672643986966413,
+          "r2": 0.5174141526222229,
+          "mse": 0.35542359948158264,
+          "mae": 0.31106090545654297,
+          "error": ""
+        }
+      ]
+    }
+  }
+}

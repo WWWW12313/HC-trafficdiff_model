@@ -424,6 +424,7 @@ def train_stage(
     mask_subdir: str = "causal_masks",
     causal_start_frac: float = 0.0,
     causal_warmup_frac: float = 0.2,
+    causal_mask_mode: str = "allowed_penalty",
     dataname: Optional[str] = None,
 ):
     """训练指定 Stage 的扩散模型
@@ -533,7 +534,7 @@ def train_stage(
         f"[causal_schedule] start_frac={causal_start_frac:.2f}, "
         f"warmup_frac={causal_warmup_frac:.2f}, "
         f"start_epoch={causal_start_steps}, warmup_epochs={causal_warmup_steps}, "
-        f"lambda_max={float(lambda_causal):.4f}"
+        f"lambda_max={float(lambda_causal):.4f}, mask_mode={causal_mask_mode}"
     )
 
     diffusion = UnifiedCtimeDiffusion(
@@ -546,6 +547,7 @@ def train_stage(
         causal_weight_max=float(lambda_causal),
         causal_warmup_steps=causal_warmup_steps,
         causal_start_step=causal_start_steps,
+        causal_mask_mode=causal_mask_mode,
     )
 
     num_params = sum(p.numel() for p in diffusion.parameters())
@@ -693,6 +695,13 @@ def main():
         help="因果正则线性升至 lambda_causal 的 epoch 占比，默认 0.2",
     )
     parser.add_argument(
+        "--causal_mask_mode",
+        type=str,
+        default="allowed_penalty",
+        choices=["allowed_penalty", "forbidden_penalty"],
+        help="因果 mask 损失语义：allowed_penalty 为旧行为；forbidden_penalty 只惩罚未保留的跨特征边",
+    )
+    parser.add_argument(
         "--dataname",
         type=str,
         default=None,
@@ -716,6 +725,7 @@ def main():
         mask_subdir=args.mask_subdir,
         causal_start_frac=args.causal_start_frac,
         causal_warmup_frac=args.causal_warmup_frac,
+        causal_mask_mode=args.causal_mask_mode,
         dataname=args.dataname,
     )
 
