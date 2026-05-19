@@ -1,0 +1,79 @@
+{
+  "generated_utc": "20260519_144417",
+  "primary_metrics_profile": "auto",
+  "two_tier_methodology": {
+    "structural_layer": [
+      "cmi_abs_error_mean",
+      "shd_normalized"
+    ],
+    "task_layer": [
+      "tstr_avg_score",
+      "tstr_r2",
+      "tstr_accuracy"
+    ]
+  },
+  "real_test": "data\\nyc_crash_2024_v2\\test.csv",
+  "task_type": "regression",
+  "target_col": "NUMBER OF PERSONS INJURED",
+  "file_glob": "macro_sparse_anneal_v2_full_relation_calibrated_s015.csv",
+  "joint_metrics_enabled": false,
+  "joint_specs": [],
+  "rows": [
+    {
+      "file": "macro_sparse_anneal_v2_full_relation_calibrated_s015.csv",
+      "n_rows": 10000,
+      "mean_wasserstein_numeric": 0.210084,
+      "mean_js_categorical": 0.008924,
+      "tstr_avg_score": 0.73392,
+      "tstr_best_model": "random_forest",
+      "tstr_best_model_score": 0.742703,
+      "tstr_r2": 0.615105,
+      "tstr_mse": 0.283474,
+      "tstr_mae": 0.208047
+    }
+  ],
+  "ranked_summary": [],
+  "tstr_benchmark_details": {
+    "macro_sparse_anneal_v2_full_relation_calibrated_s015.csv": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.7339201110206798,
+        "best_model": "random_forest",
+        "best_model_avg_score": 0.7427034256889931,
+        "mean_r2": 0.6086072298876973,
+        "mean_mse": 0.2882600636611257,
+        "mean_mae": 0.2245958119915115
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.7406741841150302,
+          "r2": 0.6151052713394165,
+          "mse": 0.28347426652908325,
+          "mae": 0.20804743468761444,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.7427034256889931,
+          "r2": 0.61981528192536,
+          "mse": 0.28000536898668826,
+          "mae": 0.2091192663568816,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.7183827232580161,
+          "r2": 0.5909011363983154,
+          "mse": 0.3013005554676056,
+          "mae": 0.25662073493003845,
+          "error": ""
+        }
+      ]
+    }
+  }
+}
