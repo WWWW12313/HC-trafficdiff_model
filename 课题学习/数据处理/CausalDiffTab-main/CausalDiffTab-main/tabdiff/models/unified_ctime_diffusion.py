@@ -33,6 +33,7 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
             device=torch.device('cpu'),
             causal_weight_max: float = 1.0,    # 新增参数
             causal_warmup_steps: int = 4000,   # 新增参数
+            causal_start_step: int = 0,
             **kwargs
         ):
 
@@ -71,6 +72,7 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         self.sampler_params = sampler_params
         self.causal_weight_max = causal_weight_max
         self.causal_warmup_steps = causal_warmup_steps
+        self.causal_start_step = causal_start_step
         self.ema_loss = None
         self.w_num = 0.0
         self.w_cat = 0.0
@@ -276,12 +278,17 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
                 model_out_num, x_num_t, noise, sigma_num, current_step=current_training_step
             )
 
-        # Causal penalty linear warmup: ramp from 0 → causal_weight_max
-        # over the first `causal_warmup_steps` epochs
-        if current_training_step is not None and self.causal_warmup_steps > 0:
-            causal_lambda = self.causal_weight_max * min(
-                1.0, float(current_training_step) / float(self.causal_warmup_steps)
-            )
+        # Causal penalty schedule: optional delay, then linear ramp to causal_weight_max.
+        if current_training_step is not None:
+            step_after_start = float(current_training_step) - float(self.causal_start_step)
+            if step_after_start <= 0:
+                causal_lambda = 0.0
+            elif self.causal_warmup_steps > 0:
+                causal_lambda = self.causal_weight_max * min(
+                    1.0, step_after_start / float(self.causal_warmup_steps)
+                )
+            else:
+                causal_lambda = self.causal_weight_max
         else:
             causal_lambda = self.causal_weight_max
 

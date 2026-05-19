@@ -43,6 +43,9 @@ def _run_train_stage(
     use_causal_masks: bool,
     device: str,
     dataname: str,
+    mask_subdir: str = "causal_masks",
+    causal_start_frac: float = 0.0,
+    causal_warmup_frac: float = 0.2,
 ) -> None:
     cmd = [
         sys.executable,
@@ -57,6 +60,12 @@ def _run_train_stage(
         str(lambda_causal),
         "--device",
         device,
+        "--mask_subdir",
+        mask_subdir,
+        "--causal_start_frac",
+        str(causal_start_frac),
+        "--causal_warmup_frac",
+        str(causal_warmup_frac),
     ]
     cmd.extend(["--dataname", dataname])
     if not use_causal_masks:
@@ -128,6 +137,15 @@ def main():
             "our_model_no_h3",
             "macro_soft_2024",
             "our_model",
+            # v2 (45-col 2024 schema)
+            "baseline_tabddpm_v2",
+            "ablation_no_causal_v2",
+            "ablation_no_hierarchy_v2",
+            "macro_soft_2024_v2",
+            # v2 优化实验 (lambda 灵敏度)
+            "macro_soft_lam005_v2",
+            "macro_soft_lam01_v2",
+            "macro_sparse_anneal_v2",
         ],
         help="与 configs/experiments/*.yaml 中 model_name 一致",
     )
@@ -195,6 +213,9 @@ def main():
     use_causal_masks = bool(cfg.get("use_causal_masks", True))
     hierarchical = bool(cfg.get("hierarchical", False))
     train_stage2 = bool(cfg.get("train_stage2", False))
+    mask_subdir = str(cfg.get("mask_subdir", "causal_masks"))
+    causal_start_frac = float(cfg.get("causal_start_frac", 0.0))
+    causal_warmup_frac = float(cfg.get("causal_warmup_frac", 0.2))
     sampling = cfg.get("sampling") or {}
     mode = sampling.get("mode", "unconditional")
 
@@ -207,14 +228,17 @@ def main():
     if not args.skip_train:
         if hierarchical:
             _run_train_stage(
-                1, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
+                1, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname,
+                mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac
             )
         if train_stage2:
             _run_train_stage(
-                2, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
+                2, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname,
+                mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac
             )
         _run_train_stage(
-            3, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname
+            3, args.tier, experiment_id, lambda_causal, use_causal_masks, args.device, args.dataname,
+            mask_subdir=mask_subdir, causal_start_frac=causal_start_frac, causal_warmup_frac=causal_warmup_frac
         )
 
     if args.skip_sample:

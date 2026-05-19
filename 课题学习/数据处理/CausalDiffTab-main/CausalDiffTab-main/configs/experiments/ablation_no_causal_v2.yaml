@@ -1,0 +1,13 @@
+# CausalDiffTab experiment config — v2 schema (45-col, 2024 data)
+# 消融：有分层 (Stage1+Stage3 Inpainting)，但关闭因果约束
+# 对照组：验证因果掩码对生成质量的贡献
+model_name: ablation_no_causal_v2
+experiment_id: ablation_no_causal_v2
+lambda_causal: 0.0
+use_causal_masks: false
+hierarchical: true
+description: "消融因果：分层 Inpainting，但关闭 NOTEARS 掩码与因果正则 (lambda=0)"
+sampling:
+  mode: impute_stage3
+  num_samples: 10000
+  impute_indices_count: 10000

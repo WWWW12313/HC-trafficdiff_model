@@ -1,0 +1,14 @@
+# CausalDiffTab experiment config — v2 优化实验
+# 完全体优化 Opt-A：降低因果正则强度 lambda=0.05
+# 基于消融结果（无因果>完全体），因果约束过强假设，降为 0.05 验证
+model_name: macro_soft_lam005_v2
+experiment_id: macro_soft_lam005_v2
+lambda_causal: 0.05
+use_causal_masks: true
+hierarchical: true
+mask_subdir: causal_masks_soft
+description: "优化 Opt-A：宏观软因果骨架 + 分层 Inpainting，lambda=0.05（弱化因果约束），2024 45-col schema"
+sampling:
+  mode: impute_stage3
+  num_samples: 10000
+  impute_indices_count: 10000

@@ -422,6 +422,8 @@ def train_stage(
     lambda_causal: float = 1.0,
     use_causal_masks: bool = True,
     mask_subdir: str = "causal_masks",
+    causal_start_frac: float = 0.0,
+    causal_warmup_frac: float = 0.2,
     dataname: Optional[str] = None,
 ):
     """训练指定 Stage 的扩散模型
@@ -523,9 +525,16 @@ def train_stage(
     model = Model(backbone, **raw_config["diffusion_params"]["edm_params"])
     model.to(device)
 
-    # Causal warmup: first 20% of epochs have linearly increasing causal penalty
+    # Causal schedule: optional delay, then linear warmup.
     total_epochs = raw_config["train"]["main"]["steps"]
-    causal_warmup_steps = int(total_epochs * 0.2)
+    causal_start_steps = int(total_epochs * float(causal_start_frac))
+    causal_warmup_steps = int(total_epochs * float(causal_warmup_frac))
+    print(
+        f"[causal_schedule] start_frac={causal_start_frac:.2f}, "
+        f"warmup_frac={causal_warmup_frac:.2f}, "
+        f"start_epoch={causal_start_steps}, warmup_epochs={causal_warmup_steps}, "
+        f"lambda_max={float(lambda_causal):.4f}"
+    )
 
     diffusion = UnifiedCtimeDiffusion(
         num_classes=categories,
@@ -536,6 +545,7 @@ def train_stage(
         device=torch.device(device),
         causal_weight_max=float(lambda_causal),
         causal_warmup_steps=causal_warmup_steps,
+        causal_start_step=causal_start_steps,
     )
 
     num_params = sum(p.numel() for p in diffusion.parameters())
@@ -671,6 +681,18 @@ def main():
         help="掩码子目录名 (默认 causal_masks=binary; soft 实验传 causal_masks_soft)",
     )
     parser.add_argument(
+        "--causal_start_frac",
+        type=float,
+        default=0.0,
+        help="因果正则开始 epoch 占比，默认 0.0；例如 0.5 表示前半程关闭因果项",
+    )
+    parser.add_argument(
+        "--causal_warmup_frac",
+        type=float,
+        default=0.2,
+        help="因果正则线性升至 lambda_causal 的 epoch 占比，默认 0.2",
+    )
+    parser.add_argument(
         "--dataname",
         type=str,
         default=None,
@@ -692,6 +714,8 @@ def main():
         lambda_causal=args.lambda_causal,
         use_causal_masks=not args.no_causal_masks,
         mask_subdir=args.mask_subdir,
+        causal_start_frac=args.causal_start_frac,
+        causal_warmup_frac=args.causal_warmup_frac,
         dataname=args.dataname,
     )
 

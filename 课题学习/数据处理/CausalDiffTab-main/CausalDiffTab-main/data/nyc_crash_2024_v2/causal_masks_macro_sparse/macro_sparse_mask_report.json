@@ -1,0 +1,89 @@
+{
+  "dataname": "nyc_crash_2024_v2",
+  "stage1_dataname": "nyc_stage1_2024_v2",
+  "mask_subdir": "causal_masks_macro_sparse",
+  "column_level_edges": 526,
+  "full_num_nonzero": 21,
+  "full_cat_nonzero": 4534,
+  "stage1_num_nonzero": 0,
+  "stage1_cat_nonzero": 0,
+  "edge_groups": [
+    {
+      "source_group": "time",
+      "target_group": "weather",
+      "weight": 0.8,
+      "expanded_edges": 24,
+      "note": "season/time-of-day strongly shape weather context"
+    },
+    {
+      "source_group": "geo",
+      "target_group": "weather",
+      "weight": 0.25,
+      "expanded_edges": 8,
+      "note": "NYC microclimate is spatial but kept weak"
+    },
+    {
+      "source_group": "geo",
+      "target_group": "road_context",
+      "weight": 1.0,
+      "expanded_edges": 10,
+      "note": "road attributes are location-determined"
+    },
+    {
+      "source_group": "weather",
+      "target_group": "crash_type",
+      "weight": 0.7,
+      "expanded_edges": 48,
+      "note": "weather changes proximate crash mechanism"
+    },
+    {
+      "source_group": "road_context",
+      "target_group": "crash_type",
+      "weight": 0.8,
+      "expanded_edges": 60,
+      "note": "road context shapes crash mechanism"
+    },
+    {
+      "source_group": "vehicle_type",
+      "target_group": "crash_type",
+      "weight": 0.8,
+      "expanded_edges": 96,
+      "note": "vehicle mix shapes crash mechanism"
+    },
+    {
+      "source_group": "time_light_proxy",
+      "target_group": "crash_type",
+      "weight": 0.45,
+      "expanded_edges": 48,
+      "note": "light condition is absent, so time acts as a weak proxy"
+    },
+    {
+      "source_group": "crash_type",
+      "target_group": "injury_outcome",
+      "weight": 1.0,
+      "expanded_edges": 96,
+      "note": "proximate crash type drives injury outcome"
+    },
+    {
+      "source_group": "road_context",
+      "target_group": "injury_outcome",
+      "weight": 0.5,
+      "expanded_edges": 40,
+      "note": "road context affects injury severity"
+    },
+    {
+      "source_group": "vehicle_type",
+      "target_group": "injury_outcome",
+      "weight": 0.5,
+      "expanded_edges": 64,
+      "note": "vehicle type affects injury severity"
+    },
+    {
+      "source_group": "weather",
+      "target_group": "injury_outcome",
+      "weight": 0.4,
+      "expanded_edges": 32,
+      "note": "weather/light context affects injury severity"
+    }
+  ]
+}

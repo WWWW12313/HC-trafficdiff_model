@@ -1,0 +1,12 @@
+# CausalDiffTab experiment config — v2 schema (45-col, 2024 data)
+# 消融：有因果掩码 (lambda=0.3 软因果正则)，但无分层，Stage3 全表无条件一步生成
+# 对照组：验证分层结构对生成质量的贡献
+model_name: ablation_no_hierarchy_v2
+experiment_id: ablation_no_hierarchy_v2
+lambda_causal: 0.3
+use_causal_masks: true
+hierarchical: false
+description: "消融分层：因果掩码 + lambda=0.3 正则，但无分层——仅 Stage3 全表无条件一步生成"
+sampling:
+  mode: unconditional
+  num_samples: 10000

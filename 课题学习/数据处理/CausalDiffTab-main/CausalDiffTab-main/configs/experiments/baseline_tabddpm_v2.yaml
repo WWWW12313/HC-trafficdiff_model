@@ -1,0 +1,11 @@
+# CausalDiffTab experiment config — v2 schema (45-col, 2024 data)
+# 纯扩散基线 (TabDDPM)：无因果掩码、无分层，Stage3 全表无条件生成
+model_name: baseline_tabddpm_v2
+experiment_id: baseline_tabddpm_v2
+lambda_causal: 0.0
+use_causal_masks: false
+hierarchical: false
+description: "纯扩散基线 (TabDDPM)：无因果掩码、无分层，2024 45-col schema"
+sampling:
+  mode: unconditional
+  num_samples: 10000

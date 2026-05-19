@@ -1,0 +1,79 @@
+{
+  "generated_utc": "20260518_172619",
+  "primary_metrics_profile": "auto",
+  "two_tier_methodology": {
+    "structural_layer": [
+      "cmi_abs_error_mean",
+      "shd_normalized"
+    ],
+    "task_layer": [
+      "tstr_avg_score",
+      "tstr_r2",
+      "tstr_accuracy"
+    ]
+  },
+  "real_test": "C:\\Users\\Admin\\Desktop\\hujunzhe\\课题学习\\数据处理\\CausalDiffTab-main\\CausalDiffTab-main\\data\\nyc_crash_2024_v2\\test.csv",
+  "task_type": "regression",
+  "target_col": "NUMBER OF PERSONS INJURED",
+  "file_glob": "macro_sparse_anneal_v2_full.csv",
+  "joint_metrics_enabled": false,
+  "joint_specs": [],
+  "rows": [
+    {
+      "file": "macro_sparse_anneal_v2_full.csv",
+      "n_rows": 10000,
+      "mean_wasserstein_numeric": 0.210084,
+      "mean_js_categorical": 0.008924,
+      "tstr_avg_score": 0.719881,
+      "tstr_best_model": "random_forest",
+      "tstr_best_model_score": 0.74401,
+      "tstr_r2": 0.613785,
+      "tstr_mse": 0.284447,
+      "tstr_mae": 0.201776
+    }
+  ],
+  "ranked_summary": [],
+  "tstr_benchmark_details": {
+    "macro_sparse_anneal_v2_full.csv": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.7198807020443455,
+        "best_model": "random_forest",
+        "best_model_avg_score": 0.7440095112960671,
+        "mean_r2": 0.5917854785888831,
+        "mean_mse": 0.30064926043567025,
+        "mean_mae": 0.2569740632905913
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.7414775622438317,
+          "r2": 0.6137851476669312,
+          "mse": 0.2844465672969818,
+          "mae": 0.20177558064460754,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.7440095112960671,
+          "r2": 0.6170157432465078,
+          "mse": 0.2820672242467691,
+          "mae": 0.19757253519724396,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.6741550325931377,
+          "r2": 0.5445555448532104,
+          "mse": 0.3354339897632599,
+          "mae": 0.3715740740299225,
+          "error": ""
+        }
+      ]
+    }
+  }
+}
