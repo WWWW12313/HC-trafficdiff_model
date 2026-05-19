@@ -24,6 +24,13 @@ from evaluate_joint_metrics import (
     ConditionalMutualInformationEvaluator,
     evaluate_shd_from_files,
 )
+from evaluate_macro_relations import (
+    _build_specs as _build_macro_relation_specs,
+    _cmi_error as _macro_relation_cmi_error,
+    _load_json as _load_macro_relation_json,
+    _summarize as _summarize_macro_relations,
+    _weighted_group_mean_error as _macro_relation_group_error,
+)
 
 CDT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -218,6 +225,60 @@ def _prepare_xy(
     return X, y
 
 
+def _run_tstr_benchmark(
+    syn: pd.DataFrame,
+    real_df: pd.DataFrame,
+    target_col: str,
+    feature_cols: List[str],
+    task_type: str,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    Xs, ys = _prepare_xy(syn, target_col, feature_cols)
+    Xt, yt = _prepare_xy(real_df, target_col, feature_cols)
+    all_cols = sorted(set(Xs.columns) | set(Xt.columns))
+    Xs = Xs.reindex(columns=all_cols, fill_value=0)
+    Xt = Xt.reindex(columns=all_cols, fill_value=0)
+
+    evaluator = BenchmarkEvaluator(task_type=task_type, random_state=42)
+    return evaluator.evaluate(Xs, ys, Xt, yt)
+
+
+def _write_tstr_metrics(
+    row: Dict[str, Any],
+    prefix: str,
+    bench_df: pd.DataFrame,
+    bench_summary: Dict[str, Any],
+    task_type: str,
+) -> None:
+    row[f"{prefix}_avg_score"] = round(float(bench_summary.get("avg_score_mean", float("nan"))), 6)
+    row[f"{prefix}_best_model"] = str(bench_summary.get("best_model", ""))
+    row[f"{prefix}_best_model_score"] = round(
+        float(bench_summary.get("best_model_avg_score", float("nan"))),
+        6,
+    )
+
+    xgb_row = bench_df[bench_df["model"] == "xgboost"]
+    if not xgb_row.empty and str(xgb_row.iloc[0].get("status", "")) == "ok":
+        if task_type == "regression":
+            row[f"{prefix}_r2"] = round(float(xgb_row.iloc[0].get("r2", float("nan"))), 6)
+            row[f"{prefix}_mse"] = round(float(xgb_row.iloc[0].get("mse", float("nan"))), 6)
+            row[f"{prefix}_mae"] = round(float(xgb_row.iloc[0].get("mae", float("nan"))), 6)
+        else:
+            row[f"{prefix}_f1_macro"] = round(float(xgb_row.iloc[0].get("f1_macro", float("nan"))), 6)
+            row[f"{prefix}_f1_micro"] = round(float(xgb_row.iloc[0].get("f1_micro", float("nan"))), 6)
+            row[f"{prefix}_accuracy"] = round(float(xgb_row.iloc[0].get("accuracy", float("nan"))), 6)
+            auroc_val = xgb_row.iloc[0].get("auroc", float("nan"))
+            if auroc_val is not None and not (isinstance(auroc_val, float) and np.isnan(auroc_val)):
+                row[f"{prefix}_auroc"] = round(float(auroc_val), 6)
+    elif task_type == "regression":
+        row[f"{prefix}_r2"] = float("nan")
+        row[f"{prefix}_mse"] = float("nan")
+        row[f"{prefix}_mae"] = float("nan")
+    else:
+        row[f"{prefix}_f1_macro"] = float("nan")
+        row[f"{prefix}_f1_micro"] = float("nan")
+        row[f"{prefix}_accuracy"] = float("nan")
+
+
 def _proxy_outcome_columns(columns: List[str]) -> List[str]:
     """Columns that are target descendants/proxies rather than causal parents."""
     proxy_cols = []
@@ -228,6 +289,82 @@ def _proxy_outcome_columns(columns: List[str]) -> List[str]:
         elif name in {"TOTAL_VEHICLES", "IS_MULTI_VEHICLE"}:
             proxy_cols.append(col)
     return proxy_cols
+
+
+def _target_distribution_metrics(
+    syn: pd.DataFrame,
+    real: pd.DataFrame,
+    target_col: str,
+) -> Dict[str, float]:
+    if target_col not in syn.columns or target_col not in real.columns:
+        return {}
+    syn_y = _to_numeric_series(syn[target_col]).dropna().clip(lower=0)
+    real_y = _to_numeric_series(real[target_col]).dropna().clip(lower=0)
+    if len(syn_y) < 2 or len(real_y) < 2:
+        return {}
+    try:
+        from scipy.stats import wasserstein_distance
+
+        target_wd = float(wasserstein_distance(syn_y.values, real_y.values))
+    except Exception:
+        target_wd = float("nan")
+    syn_mean = float(syn_y.mean())
+    real_mean = float(real_y.mean())
+    syn_zero = float((syn_y == 0).mean())
+    real_zero = float((real_y == 0).mean())
+    syn_ge1 = float((syn_y >= 1).mean())
+    real_ge1 = float((real_y >= 1).mean())
+    syn_ge2 = float((syn_y >= 2).mean())
+    real_ge2 = float((real_y >= 2).mean())
+    return {
+        "target_real_mean": round(real_mean, 6),
+        "target_syn_mean": round(syn_mean, 6),
+        "target_mean_abs_error": round(abs(syn_mean - real_mean), 6),
+        "target_real_zero_rate": round(real_zero, 6),
+        "target_syn_zero_rate": round(syn_zero, 6),
+        "target_zero_rate_abs_error": round(abs(syn_zero - real_zero), 6),
+        "target_real_ge1_rate": round(real_ge1, 6),
+        "target_syn_ge1_rate": round(syn_ge1, 6),
+        "target_ge1_rate_abs_error": round(abs(syn_ge1 - real_ge1), 6),
+        "target_real_ge2_rate": round(real_ge2, 6),
+        "target_syn_ge2_rate": round(syn_ge2, 6),
+        "target_ge2_rate_abs_error": round(abs(syn_ge2 - real_ge2), 6),
+        "target_wasserstein": round(target_wd, 6) if np.isfinite(target_wd) else float("nan"),
+    }
+
+
+def _macro_relation_metrics(
+    real_df: pd.DataFrame,
+    syn_df: pd.DataFrame,
+    groups_json: str,
+    target_col: str,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    groups_path = Path(groups_json)
+    if not groups_path.is_absolute():
+        groups_path = CDT_ROOT / groups_path
+    groups = _load_macro_relation_json(groups_path)
+    specs = _build_macro_relation_specs(groups)
+
+    rows: List[Dict[str, Any]] = []
+    for spec in specs:
+        item = _macro_relation_group_error(real_df, syn_df, spec, target_col)
+        if item.get("status") == "ok":
+            item.update(_macro_relation_cmi_error(real_df, syn_df, spec, target_col))
+        rows.append(item)
+
+    summary = _summarize_macro_relations(rows)
+    ok_specs = [r for r in rows if r.get("status") == "ok"]
+    group_mae = [r.get("mean_group_mae") for r in summary]
+    cmi_err = [r.get("mean_cmi_abs_error") for r in summary]
+    metrics = {
+        "macro_relation_n_specs": int(len(ok_specs)),
+        "macro_relation_total_specs": int(len(specs)),
+        "macro_relation_coverage": round(float(len(ok_specs) / max(len(specs), 1)), 6),
+        "macro_relation_group_mae_mean": round(float(np.nanmean(group_mae)), 6) if group_mae else float("nan"),
+        "macro_relation_cmi_abs_error_mean": round(float(np.nanmean(cmi_err)), 6) if cmi_err else float("nan"),
+        "macro_relation_summary": summary,
+    }
+    return metrics, rows
 
 
 def _load_info(info_json: Optional[str] = None) -> dict:
@@ -345,11 +482,28 @@ def _compute_ranked_summary(
         task_primary = [_safe(r.get("tstr_r2")) for r in results]
     else:
         task_primary = [_safe(r.get("tstr_accuracy")) for r in results]
+    no_proxy_scores = [_safe(r.get("no_proxy_tstr_avg_score", r.get("tstr_avg_score"))) for r in results]
+    if task_type == "regression":
+        no_proxy_primary = [_safe(r.get("no_proxy_tstr_r2", r.get("tstr_r2"))) for r in results]
+    else:
+        no_proxy_primary = [_safe(r.get("no_proxy_tstr_accuracy", r.get("tstr_accuracy"))) for r in results]
+    macro_group = [_safe(r.get("macro_relation_group_mae_mean")) for r in results]
+    macro_cmi = [_safe(r.get("macro_relation_cmi_abs_error_mean")) for r in results]
+    macro_coverage = [_safe(r.get("macro_relation_coverage")) for r in results]
+    target_mean = [_safe(r.get("target_mean_abs_error")) for r in results]
+    target_zero = [_safe(r.get("target_zero_rate_abs_error")) for r in results]
     # Normalized scores (all in [0,1], higher = better)
     nc_cmi = _norm_lower(cmi_errs)
     nc_shd = _norm_lower(shd_norms)
     nc_avg = _norm_higher(avg_scores)
     nc_task = _norm_higher(task_primary)
+    nc_no_proxy_avg = _norm_higher(no_proxy_scores)
+    nc_no_proxy_task = _norm_higher(no_proxy_primary)
+    nc_macro_group = _norm_lower(macro_group)
+    nc_macro_cmi = _norm_lower(macro_cmi)
+    nc_macro_coverage = _norm_higher(macro_coverage)
+    nc_target_mean = _norm_lower(target_mean)
+    nc_target_zero = _norm_lower(target_zero)
 
     def _avg_finite(*vals: float) -> float:
         finite = [v for v in vals if np.isfinite(v)]
@@ -365,6 +519,16 @@ def _compute_ranked_summary(
             s = _avg_finite(nc_cmi[i], nc_shd[i], nc_avg[i], nc_task[i])
         elif profile == "full":
             s = _avg_finite(nc_cmi[i], nc_shd[i], nc_avg[i], nc_task[i])
+        elif profile == "causal_traffic":
+            s = _avg_finite(
+                nc_no_proxy_avg[i],
+                nc_no_proxy_task[i],
+                nc_macro_group[i],
+                nc_macro_cmi[i],
+                nc_macro_coverage[i],
+                nc_target_mean[i],
+                nc_target_zero[i],
+            )
         else:
             s = _avg_finite(nc_avg[i], nc_task[i])
         composite.append(s)
@@ -381,6 +545,13 @@ def _compute_ranked_summary(
             "shd_normalized": r.get("shd_normalized"),
             "tstr_avg_score": r.get("tstr_avg_score"),
             "tstr_r2_or_accuracy": task_primary[idx] if np.isfinite(task_primary[idx]) else None,
+            "no_proxy_tstr_avg_score": r.get("no_proxy_tstr_avg_score"),
+            "no_proxy_tstr_r2_or_accuracy": no_proxy_primary[idx] if np.isfinite(no_proxy_primary[idx]) else None,
+            "macro_relation_group_mae_mean": r.get("macro_relation_group_mae_mean"),
+            "macro_relation_cmi_abs_error_mean": r.get("macro_relation_cmi_abs_error_mean"),
+            "macro_relation_coverage": r.get("macro_relation_coverage"),
+            "target_mean_abs_error": r.get("target_mean_abs_error"),
+            "target_zero_rate_abs_error": r.get("target_zero_rate_abs_error"),
         })
     return ranked
 
@@ -416,6 +587,12 @@ def main():
         type=str,
         default="*.csv",
         help="仅评估 synthetic_dir 下匹配该 glob 的文件，例如 *_balanced.csv、*_full.csv",
+    )
+    parser.add_argument(
+        "--file_list",
+        type=str,
+        default=None,
+        help="逗号分隔的精确文件名列表；指定后优先于 file_glob，用于公平比较少数模型",
     )
     parser.add_argument(
         "--task_type",
@@ -457,13 +634,14 @@ def main():
         "--primary_metrics_profile",
         type=str,
         default="auto",
-        choices=["auto", "structural", "downstream", "no_rule", "full"],
+        choices=["auto", "structural", "downstream", "no_rule", "full", "causal_traffic"],
         help=(
             "主指标配置（决定输出的综合排名依据）：\n"
             "  structural  - 结构层优先（CMI误差 + SHD）\n"
             "  downstream  - 任务层优先（TSTR R2/F1 + avg_score）\n"
             "  no_rule     - 结构层 + 任务层（等效 no_rule）\n"
             "  full        - 结构层 + 任务层均等权重\n"
+            "  causal_traffic - 去代理TSTR + 宏观关系 + 伤亡目标分布\n"
             "  auto        - 向后兼容旧行为（不生成综合排名）"
         ),
     )
@@ -471,6 +649,22 @@ def main():
         "--exclude_proxy_outcomes",
         action="store_true",
         help="TSTR 时排除伤亡派生/车辆上下文代理列，评估更接近因果父变量的预测效用",
+    )
+    parser.add_argument(
+        "--causal_eval_suite",
+        action="store_true",
+        help="同时输出 standard/no-proxy/proxy-only TSTR、目标分布、宏观交通关系指标",
+    )
+    parser.add_argument(
+        "--enable_macro_relations",
+        action="store_true",
+        help="启用 weather/road/vehicle/crash_type -> injury 的宏观关系指标",
+    )
+    parser.add_argument(
+        "--groups_json",
+        type=str,
+        default="data/processed/column_groups.json",
+        help="宏观关系评估使用的列组 JSON",
     )
     parser.add_argument(
         "--output_tag",
@@ -504,11 +698,18 @@ def main():
         syn_folder = CDT_ROOT / args.synthetic_dir
     if not syn_folder.is_dir():
         raise SystemExit(f"合成目录不存在: {args.synthetic_dir}")
-    files = sorted(
-        f
-        for f in syn_folder.glob(args.file_glob)
-        if f.is_file() and not f.name.startswith("_")
-    )
+    if args.file_list:
+        wanted = [x.strip() for x in args.file_list.split(",") if x.strip()]
+        files = [syn_folder / x for x in wanted if (syn_folder / x).is_file()]
+        missing = [x for x in wanted if not (syn_folder / x).is_file()]
+        if missing:
+            print(f"[warn] file_list 中有文件不存在，已跳过: {missing}")
+    else:
+        files = sorted(
+            f
+            for f in syn_folder.glob(args.file_glob)
+            if f.is_file() and not f.name.startswith("_")
+        )
     if not files:
         print(f"[warn] 目录中无可用合成 CSV: {syn_folder}（已跳过以下划线开头的临时文件）")
 
@@ -535,6 +736,7 @@ def main():
             "mean_wasserstein_numeric": round(stats["mean_wasserstein_numeric"], 6),
             "mean_js_categorical": round(stats["mean_js_divergence_categorical"], 6),
         }
+        row.update(_target_distribution_metrics(syn, real_df, target_col))
 
         if args.enable_joint_metrics:
             try:
@@ -567,60 +769,59 @@ def main():
                 row["joint_metrics_error"] = str(e)
 
         try:
-            common = [c for c in syn.columns if c in real_df.columns and c != target_col]
-            excluded_proxy_cols: List[str] = []
+            common_all = [c for c in syn.columns if c in real_df.columns and c != target_col]
+            excluded_proxy_cols = _proxy_outcome_columns(common_all)
+            no_proxy_cols = [c for c in common_all if c not in set(excluded_proxy_cols)]
+            primary_cols = no_proxy_cols if args.exclude_proxy_outcomes else common_all
+
+            row["tstr_standard_feature_cols_available"] = len(common_all)
+            row["tstr_proxy_cols_count"] = len(excluded_proxy_cols)
+            row["tstr_no_proxy_feature_cols_available"] = len(no_proxy_cols)
             if args.exclude_proxy_outcomes:
-                excluded_proxy_cols = _proxy_outcome_columns(common)
-                common = [c for c in common if c not in set(excluded_proxy_cols)]
                 row["tstr_excluded_proxy_cols_count"] = len(excluded_proxy_cols)
-                row["tstr_feature_cols_used"] = len(common)
+                row["tstr_feature_cols_used"] = len(primary_cols)
             if target_col not in syn.columns or target_col not in real_df.columns:
                 raise ValueError(f"目标列 {target_col} 在合成集或测试集中缺失")
 
-            Xs, ys = _prepare_xy(syn, target_col, common)
-            Xt, yt = _prepare_xy(real_df, target_col, common)
-            all_cols = sorted(set(Xs.columns) | set(Xt.columns))
-            Xs = Xs.reindex(columns=all_cols, fill_value=0)
-            Xt = Xt.reindex(columns=all_cols, fill_value=0)
-
             print(f"[tstr_benchmark] {fp.name}: task_type={task_type}, models=xgboost/random_forest/mlp")
-            evaluator = BenchmarkEvaluator(task_type=task_type, random_state=42)
-            bench_df, bench_summary = evaluator.evaluate(Xs, ys, Xt, yt)
+            bench_df, bench_summary = _run_tstr_benchmark(syn, real_df, target_col, primary_cols, task_type)
 
             benchmark_details[fp.name] = {
                 "summary": bench_summary,
                 "models": bench_df.to_dict(orient="records"),
             }
+            _write_tstr_metrics(row, "tstr", bench_df, bench_summary, task_type)
 
-            row["tstr_avg_score"] = round(float(bench_summary.get("avg_score_mean", float("nan"))), 6)
-            row["tstr_best_model"] = str(bench_summary.get("best_model", ""))
-            row["tstr_best_model_score"] = round(
-                float(bench_summary.get("best_model_avg_score", float("nan"))),
-                6,
-            )
-
-            # Keep backward-compatible headline metrics using xgboost row if available.
-            xgb_row = bench_df[bench_df["model"] == "xgboost"]
-            if not xgb_row.empty and str(xgb_row.iloc[0].get("status", "")) == "ok":
+            if args.causal_eval_suite:
+                tstr_views = {
+                    "standard_tstr": common_all,
+                    "no_proxy_tstr": no_proxy_cols,
+                }
+                if excluded_proxy_cols:
+                    tstr_views["proxy_only_tstr"] = excluded_proxy_cols
+                for view_name, view_cols in tstr_views.items():
+                    if not view_cols:
+                        continue
+                    print(f"[tstr_benchmark:{view_name}] {fp.name}: n_features={len(view_cols)}")
+                    view_df, view_summary = _run_tstr_benchmark(syn, real_df, target_col, view_cols, task_type)
+                    benchmark_details[f"{fp.name}::{view_name}"] = {
+                        "summary": view_summary,
+                        "models": view_df.to_dict(orient="records"),
+                    }
+                    _write_tstr_metrics(row, view_name, view_df, view_summary, task_type)
                 if task_type == "regression":
-                    row["tstr_r2"] = round(float(xgb_row.iloc[0].get("r2", float("nan"))), 6)
-                    row["tstr_mse"] = round(float(xgb_row.iloc[0].get("mse", float("nan"))), 6)
-                    row["tstr_mae"] = round(float(xgb_row.iloc[0].get("mae", float("nan"))), 6)
-                else:
-                    row["tstr_f1_macro"] = round(float(xgb_row.iloc[0].get("f1_macro", float("nan"))), 6)
-                    row["tstr_f1_micro"] = round(float(xgb_row.iloc[0].get("f1_micro", float("nan"))), 6)
-                    row["tstr_accuracy"] = round(float(xgb_row.iloc[0].get("accuracy", float("nan"))), 6)
-                    auroc_val = xgb_row.iloc[0].get("auroc", float("nan"))
-                    if auroc_val is not None and not (isinstance(auroc_val, float) and np.isnan(auroc_val)):
-                        row["tstr_auroc"] = round(float(auroc_val), 6)
-            elif task_type == "regression":
-                row["tstr_r2"] = float("nan")
-                row["tstr_mse"] = float("nan")
-                row["tstr_mae"] = float("nan")
-            else:
-                row["tstr_f1_macro"] = float("nan")
-                row["tstr_f1_micro"] = float("nan")
-                row["tstr_accuracy"] = float("nan")
+                    std_r2 = row.get("standard_tstr_r2", row.get("tstr_r2"))
+                    no_proxy_r2 = row.get("no_proxy_tstr_r2", row.get("tstr_r2"))
+                    try:
+                        row["proxy_leakage_r2_gap"] = round(float(std_r2) - float(no_proxy_r2), 6)
+                    except Exception:
+                        row["proxy_leakage_r2_gap"] = float("nan")
+                std_score = row.get("standard_tstr_avg_score", row.get("tstr_avg_score"))
+                no_proxy_score = row.get("no_proxy_tstr_avg_score", row.get("tstr_avg_score"))
+                try:
+                    row["proxy_leakage_avg_score_gap"] = round(float(std_score) - float(no_proxy_score), 6)
+                except Exception:
+                    row["proxy_leakage_avg_score_gap"] = float("nan")
             tstr_err = ""
         except Exception as e:
             if task_type == "regression":
@@ -642,6 +843,17 @@ def main():
 
         if tstr_err:
             row["tstr_error"] = tstr_err
+
+        if args.enable_macro_relations or args.causal_eval_suite:
+            try:
+                macro_metrics, macro_rows = _macro_relation_metrics(real_df, syn, args.groups_json, target_col)
+                row.update(macro_metrics)
+                benchmark_details[f"{fp.name}::macro_relations"] = {
+                    "summary": {k: v for k, v in macro_metrics.items() if k != "macro_relation_summary"},
+                    "models": macro_rows,
+                }
+            except Exception as e:
+                row["macro_relation_error"] = str(e)
         results.append(row)
 
     out_dir = CDT_ROOT / "results"
@@ -663,6 +875,7 @@ def main():
         f"| --- | --- | --- | --- |\n"
         f"| **结构层** | `cmi_abs_error_mean`, `shd_normalized` | 主（structural/no_rule/full 模式） | 联合分布与因果结构一致性（较低=更好） |\n"
         f"| **任务层** | `tstr_avg_score`, `tstr_r2`/`tstr_accuracy` | 主（downstream/no_rule/full 模式） | 下游 TSTR 迁移学习效果（较高=更好） |\n\n"
+        f"| **因果交通层** | `no_proxy_tstr_*`, `proxy_only_tstr_*`, `macro_relation_*`, `target_*_abs_error` | 主（causal_traffic 模式） | 区分代理泄漏、上游机制、宏观边关系和伤亡零膨胀分布 |\n\n"
     )
     md_body += _markdown_table(results)
     md_body += "\n## TSTR Benchmark Details\n\n"
@@ -694,6 +907,17 @@ def main():
         "two_tier_methodology": {
             "structural_layer": ["cmi_abs_error_mean", "shd_normalized"],
             "task_layer": ["tstr_avg_score", "tstr_r2", "tstr_accuracy"],
+            "causal_traffic_layer": [
+                "standard_tstr_avg_score",
+                "no_proxy_tstr_avg_score",
+                "proxy_only_tstr_avg_score",
+                "proxy_leakage_r2_gap",
+                "macro_relation_group_mae_mean",
+                "macro_relation_cmi_abs_error_mean",
+                "macro_relation_coverage",
+                "target_mean_abs_error",
+                "target_zero_rate_abs_error",
+            ],
         },
         "real_test": str(real_path),
         "task_type": task_type,

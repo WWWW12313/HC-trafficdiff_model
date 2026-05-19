@@ -1,0 +1,1474 @@
+{
+  "generated_utc": "20260519_152420",
+  "primary_metrics_profile": "causal_traffic",
+  "two_tier_methodology": {
+    "structural_layer": [
+      "cmi_abs_error_mean",
+      "shd_normalized"
+    ],
+    "task_layer": [
+      "tstr_avg_score",
+      "tstr_r2",
+      "tstr_accuracy"
+    ]
+  },
+  "real_test": "data\\nyc_crash_2024_v2\\test.csv",
+  "task_type": "regression",
+  "target_col": "NUMBER OF PERSONS INJURED",
+  "file_glob": "macro_sparse_anneal_v2_full.csv",
+  "joint_metrics_enabled": false,
+  "joint_specs": [],
+  "rows": [
+    {
+      "file": "macro_sparse_anneal_v2_full.csv",
+      "n_rows": 10000,
+      "mean_wasserstein_numeric": 0.210084,
+      "mean_js_categorical": 0.008924,
+      "target_real_mean": 0.589641,
+      "target_syn_mean": 0.4849,
+      "target_mean_abs_error": 0.104741,
+      "target_real_zero_rate": 0.560846,
+      "target_syn_zero_rate": 0.5936,
+      "target_zero_rate_abs_error": 0.032754,
+      "target_real_ge1_rate": 0.439154,
+      "target_syn_ge1_rate": 0.4064,
+      "target_ge1_rate_abs_error": 0.032754,
+      "target_real_ge2_rate": 0.096242,
+      "target_syn_ge2_rate": 0.0604,
+      "target_ge2_rate_abs_error": 0.035842,
+      "target_wasserstein": 0.104741,
+      "tstr_standard_feature_cols_available": 45,
+      "tstr_proxy_cols_count": 8,
+      "tstr_no_proxy_feature_cols_available": 37,
+      "tstr_avg_score": 0.719881,
+      "tstr_best_model": "random_forest",
+      "tstr_best_model_score": 0.74401,
+      "tstr_r2": 0.613785,
+      "tstr_mse": 0.284447,
+      "tstr_mae": 0.201776,
+      "standard_tstr_avg_score": 0.719881,
+      "standard_tstr_best_model": "random_forest",
+      "standard_tstr_best_model_score": 0.74401,
+      "standard_tstr_r2": 0.613785,
+      "standard_tstr_mse": 0.284447,
+      "standard_tstr_mae": 0.201776,
+      "no_proxy_tstr_avg_score": 0.402093,
+      "no_proxy_tstr_best_model": "xgboost",
+      "no_proxy_tstr_best_model_score": 0.413749,
+      "no_proxy_tstr_r2": 0.02542,
+      "no_proxy_tstr_mse": 0.717777,
+      "no_proxy_tstr_mae": 0.578081,
+      "proxy_only_tstr_avg_score": 0.738415,
+      "proxy_only_tstr_best_model": "mlp",
+      "proxy_only_tstr_best_model_score": 0.740648,
+      "proxy_only_tstr_r2": 0.608235,
+      "proxy_only_tstr_mse": 0.288534,
+      "proxy_only_tstr_mae": 0.208037,
+      "proxy_leakage_r2_gap": 0.588365,
+      "proxy_leakage_avg_score_gap": 0.317788,
+      "macro_relation_n_specs": 29,
+      "macro_relation_group_mae_mean": 0.104388,
+      "macro_relation_cmi_abs_error_mean": 0.131894,
+      "macro_relation_summary": [
+        {
+          "relation": "crash_type_to_injury",
+          "n_specs": 12,
+          "mean_group_mae": 0.104664,
+          "max_group_mae": 0.106448,
+          "mean_cmi_abs_error": 0.11803,
+          "max_cmi_abs_error": 0.216521
+        },
+        {
+          "relation": "road_to_injury",
+          "n_specs": 5,
+          "mean_group_mae": 0.104099,
+          "max_group_mae": 0.104503,
+          "mean_cmi_abs_error": 0.144578,
+          "max_cmi_abs_error": 0.160872
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "n_specs": 8,
+          "mean_group_mae": 0.104113,
+          "max_group_mae": 0.105123,
+          "mean_cmi_abs_error": 0.024114,
+          "max_cmi_abs_error": 0.03985
+        },
+        {
+          "relation": "weather_to_injury",
+          "n_specs": 4,
+          "mean_group_mae": 0.104676,
+          "max_group_mae": 0.104765,
+          "mean_cmi_abs_error": 0.240853,
+          "max_cmi_abs_error": 0.439063
+        }
+      ]
+    }
+  ],
+  "ranked_summary": [
+    {
+      "rank": 1,
+      "file": "macro_sparse_anneal_v2_full.csv",
+      "composite_score": 0.0,
+      "cmi_abs_error_mean": null,
+      "shd_normalized": null,
+      "tstr_avg_score": 0.719881,
+      "tstr_r2_or_accuracy": 0.613785,
+      "no_proxy_tstr_avg_score": 0.402093,
+      "no_proxy_tstr_r2_or_accuracy": 0.02542,
+      "macro_relation_group_mae_mean": 0.104388,
+      "macro_relation_cmi_abs_error_mean": 0.131894,
+      "target_mean_abs_error": 0.104741,
+      "target_zero_rate_abs_error": 0.032754
+    }
+  ],
+  "tstr_benchmark_details": {
+    "macro_sparse_anneal_v2_full.csv": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.7198807020443455,
+        "best_model": "random_forest",
+        "best_model_avg_score": 0.7440095112960671,
+        "mean_r2": 0.5917854785888831,
+        "mean_mse": 0.30064926043567025,
+        "mean_mae": 0.2569740632905913
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.7414775622438317,
+          "r2": 0.6137851476669312,
+          "mse": 0.2844465672969818,
+          "mae": 0.20177558064460754,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.7440095112960671,
+          "r2": 0.6170157432465078,
+          "mse": 0.2820672242467691,
+          "mae": 0.19757253519724396,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.6741550325931377,
+          "r2": 0.5445555448532104,
+          "mse": 0.3354339897632599,
+          "mae": 0.3715740740299225,
+          "error": ""
+        }
+      ]
+    },
+    "macro_sparse_anneal_v2_full.csv::standard_tstr": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.7198807020443455,
+        "best_model": "random_forest",
+        "best_model_avg_score": 0.7440095112960671,
+        "mean_r2": 0.5917854785888831,
+        "mean_mse": 0.30064926043567025,
+        "mean_mae": 0.2569740632905913
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.7414775622438317,
+          "r2": 0.6137851476669312,
+          "mse": 0.2844465672969818,
+          "mae": 0.20177558064460754,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.7440095112960671,
+          "r2": 0.6170157432465078,
+          "mse": 0.2820672242467691,
+          "mae": 0.19757253519724396,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.6741550325931377,
+          "r2": 0.5445555448532104,
+          "mse": 0.3354339897632599,
+          "mae": 0.3715740740299225,
+          "error": ""
+        }
+      ]
+    },
+    "macro_sparse_anneal_v2_full.csv::no_proxy_tstr": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.4020930137507585,
+        "best_model": "xgboost",
+        "best_model_avg_score": 0.41374943863896424,
+        "mean_r2": -0.03720851698823132,
+        "mean_mse": 0.76390220428637,
+        "mean_mae": 0.6081858233382659
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.41374943863896424,
+          "r2": 0.02541959285736084,
+          "mse": 0.7177767157554626,
+          "mae": 0.5780813694000244,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.4117502959513641,
+          "r2": 0.024084211608548234,
+          "mse": 0.7187602432111303,
+          "mae": 0.5889360176832548,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.3807793066619471,
+          "r2": -0.16112935543060303,
+          "mse": 0.8551696538925171,
+          "mae": 0.6575400829315186,
+          "error": ""
+        }
+      ]
+    },
+    "macro_sparse_anneal_v2_full.csv::proxy_only_tstr": {
+      "summary": {
+        "task_type": "regression",
+        "n_models_ok": 3,
+        "avg_score_mean": 0.738415051947214,
+        "best_model": "mlp",
+        "best_model_avg_score": 0.7406476049819647,
+        "mean_r2": 0.6102880337401668,
+        "mean_mse": 0.2870221447376409,
+        "mean_mae": 0.20777729821100976
+      },
+      "models": [
+        {
+          "model": "xgboost",
+          "status": "ok",
+          "avg_score": 0.7373665536404226,
+          "r2": 0.6082348823547363,
+          "mse": 0.2885342836380005,
+          "mae": 0.20803703367710114,
+          "error": ""
+        },
+        {
+          "model": "random_forest",
+          "status": "ok",
+          "avg_score": 0.7372309972192549,
+          "r2": 0.6080271299375415,
+          "mse": 0.28868732196927044,
+          "mae": 0.20819284534141852,
+          "error": ""
+        },
+        {
+          "model": "mlp",
+          "status": "ok",
+          "avg_score": 0.7406476049819647,
+          "r2": 0.6146020889282227,
+          "mse": 0.28384482860565186,
+          "mae": 0.20710201561450958,
+          "error": ""
+        }
+      ]
+    },
+    "macro_sparse_anneal_v2_full.csv::macro_relations": {
+      "summary": {
+        "macro_relation_n_specs": 29,
+        "macro_relation_group_mae_mean": 0.104388,
+        "macro_relation_cmi_abs_error_mean": 0.131894
+      },
+      "models": [
+        {
+          "relation": "weather_to_injury",
+          "parent_col": "WEATHER_CONDITION",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 4,
+          "n_groups_syn": 4,
+          "weighted_mean_abs_error": 0.104691,
+          "max_abs_error": 0.11927,
+          "group_details": [
+            {
+              "group": "Clear",
+              "real_mean_injury": 0.603471,
+              "syn_mean_injury": 0.490283,
+              "real_weight": 0.450923,
+              "abs_error": 0.113188
+            },
+            {
+              "group": "Cloudy",
+              "real_mean_injury": 0.581876,
+              "syn_mean_injury": 0.489416,
+              "real_weight": 0.3962,
+              "abs_error": 0.09246
+            },
+            {
+              "group": "Rain",
+              "real_mean_injury": 0.576271,
+              "syn_mean_injury": 0.457001,
+              "real_weight": 0.140988,
+              "abs_error": 0.11927
+            },
+            {
+              "group": "Snow",
+              "real_mean_injury": 0.482412,
+              "syn_mean_injury": 0.465278,
+              "real_weight": 0.011888,
+              "abs_error": 0.017134
+            }
+          ],
+          "real_cmi": 4.278674,
+          "syn_cmi": 4.257098,
+          "cmi_abs_error": 0.021576,
+          "cmi_rel_error": 0.005043,
+          "cond_cols": [
+            "SEASON",
+            "CRASH_TIME_SIN",
+            "CRASH_TIME_COS"
+          ]
+        },
+        {
+          "relation": "weather_to_injury",
+          "parent_col": "TEMP_C",
+          "kind": "numeric_bin",
+          "status": "ok",
+          "n_groups_real": 5,
+          "n_groups_syn": 5,
+          "weighted_mean_abs_error": 0.104507,
+          "max_abs_error": 0.154197,
+          "group_details": [
+            {
+              "group": "(-inf, 4.0]",
+              "real_mean_injury": 0.548083,
+              "syn_mean_injury": 0.481136,
+              "real_weight": 0.202521,
+              "abs_error": 0.066946
+            },
+            {
+              "group": "(10.1, 17.1]",
+              "real_mean_injury": 0.598863,
+              "syn_mean_injury": 0.473297,
+              "real_weight": 0.199713,
+              "abs_error": 0.125566
+            },
+            {
+              "group": "(17.1, 23.4]",
+              "real_mean_injury": 0.587848,
+              "syn_mean_injury": 0.511006,
+              "real_weight": 0.199594,
+              "abs_error": 0.076842
+            },
+            {
+              "group": "(23.4, inf]",
+              "real_mean_injury": 0.660617,
+              "syn_mean_injury": 0.50642,
+              "real_weight": 0.197503,
+              "abs_error": 0.154197
+            },
+            {
+              "group": "(4.0, 10.1]",
+              "real_mean_injury": 0.554332,
+              "syn_mean_injury": 0.454267,
+              "real_weight": 0.200669,
+              "abs_error": 0.100065
+            }
+          ],
+          "real_cmi": 1.135817,
+          "syn_cmi": 0.696754,
+          "cmi_abs_error": 0.439063,
+          "cmi_rel_error": 0.386561,
+          "cond_cols": [
+            "SEASON",
+            "CRASH_TIME_SIN",
+            "CRASH_TIME_COS"
+          ]
+        },
+        {
+          "relation": "weather_to_injury",
+          "parent_col": "prcp",
+          "kind": "numeric_bin",
+          "status": "ok",
+          "n_groups_real": 1,
+          "n_groups_syn": 1,
+          "weighted_mean_abs_error": 0.104741,
+          "max_abs_error": 0.104741,
+          "group_details": [
+            {
+              "group": "(-inf, inf]",
+              "real_mean_injury": 0.589641,
+              "syn_mean_injury": 0.4849,
+              "real_weight": 1.0,
+              "abs_error": 0.104741
+            }
+          ],
+          "real_cmi": 3.981275,
+          "syn_cmi": 3.898538,
+          "cmi_abs_error": 0.082737,
+          "cmi_rel_error": 0.020782,
+          "cond_cols": [
+            "SEASON",
+            "CRASH_TIME_SIN",
+            "CRASH_TIME_COS"
+          ]
+        },
+        {
+          "relation": "weather_to_injury",
+          "parent_col": "WIND_SPEED_KMH",
+          "kind": "numeric_bin",
+          "status": "ok",
+          "n_groups_real": 5,
+          "n_groups_syn": 5,
+          "weighted_mean_abs_error": 0.104765,
+          "max_abs_error": 0.129666,
+          "group_details": [
+            {
+              "group": "(-inf, 7.2]",
+              "real_mean_injury": 0.566303,
+              "syn_mean_injury": 0.482008,
+              "real_weight": 0.208137,
+              "abs_error": 0.084296
+            },
+            {
+              "group": "(10.1, 13.5]",
+              "real_mean_injury": 0.601703,
+              "syn_mean_injury": 0.472037,
+              "real_weight": 0.196487,
+              "abs_error": 0.129666
+            },
+            {
+              "group": "(13.5, 18.0]",
+              "real_mean_injury": 0.599461,
+              "syn_mean_injury": 0.487399,
+              "real_weight": 0.199415,
+              "abs_error": 0.112062
+            },
+            {
+              "group": "(18.0, inf]",
+              "real_mean_injury": 0.60307,
+              "syn_mean_injury": 0.489659,
+              "real_weight": 0.198518,
+              "abs_error": 0.113411
+            },
+            {
+              "group": "(7.2, 10.1]",
+              "real_mean_injury": 0.57882,
+              "syn_mean_injury": 0.49332,
+              "real_weight": 0.197443,
+              "abs_error": 0.0855
+            }
+          ],
+          "real_cmi": 1.003119,
+          "syn_cmi": 0.583083,
+          "cmi_abs_error": 0.420036,
+          "cmi_rel_error": 0.41873,
+          "cond_cols": [
+            "SEASON",
+            "CRASH_TIME_SIN",
+            "CRASH_TIME_COS"
+          ]
+        },
+        {
+          "relation": "road_to_injury",
+          "parent_col": "HAS_TRAFFIC_SIGNAL",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.103715,
+          "max_abs_error": 0.107925,
+          "group_details": [
+            {
+              "group": "0.0",
+              "real_mean_injury": 0.536526,
+              "syn_mean_injury": 0.428601,
+              "real_weight": 0.470219,
+              "abs_error": 0.107925
+            },
+            {
+              "group": "1.0",
+              "real_mean_injury": 0.636784,
+              "syn_mean_injury": 0.536806,
+              "real_weight": 0.529781,
+              "abs_error": 0.099978
+            }
+          ],
+          "real_cmi": 0.288408,
+          "syn_cmi": 0.127536,
+          "cmi_abs_error": 0.160872,
+          "cmi_rel_error": 0.557794,
+          "cond_cols": [
+            "LATITUDE",
+            "LONGITUDE"
+          ]
+        },
+        {
+          "relation": "road_to_injury",
+          "parent_col": "OSM_ONEWAY",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104335,
+          "max_abs_error": 0.111821,
+          "group_details": [
+            {
+              "group": "0.0",
+              "real_mean_injury": 0.613838,
+              "syn_mean_injury": 0.502017,
+              "real_weight": 0.531872,
+              "abs_error": 0.111821
+            },
+            {
+              "group": "1.0",
+              "real_mean_injury": 0.562149,
+              "syn_mean_injury": 0.466319,
+              "real_weight": 0.468128,
+              "abs_error": 0.09583
+            }
+          ],
+          "real_cmi": 0.257255,
+          "syn_cmi": 0.118057,
+          "cmi_abs_error": 0.139197,
+          "cmi_rel_error": 0.541088,
+          "cond_cols": [
+            "LATITUDE",
+            "LONGITUDE"
+          ]
+        },
+        {
+          "relation": "road_to_injury",
+          "parent_col": "OSM_TYPE",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 15,
+          "n_groups_syn": 14,
+          "weighted_mean_abs_error": 0.104025,
+          "max_abs_error": 0.466667,
+          "group_details": [
+            {
+              "group": "living_street",
+              "real_mean_injury": 0.461538,
+              "syn_mean_injury": 0.25,
+              "real_weight": 0.000777,
+              "abs_error": 0.211538
+            },
+            {
+              "group": "motorway",
+              "real_mean_injury": 0.811606,
+              "syn_mean_injury": 0.692837,
+              "real_weight": 0.071032,
+              "abs_error": 0.118769
+            },
+            {
+              "group": "motorway_link",
+              "real_mean_injury": 0.815427,
+              "syn_mean_injury": 0.689119,
+              "real_weight": 0.021686,
+              "abs_error": 0.126308
+            },
+            {
+              "group": "pedestrian",
+              "real_mean_injury": 0.666667,
+              "syn_mean_injury": null,
+              "real_weight": 0.000179,
+              "abs_error": null
+            },
+            {
+              "group": "primary",
+              "real_mean_injury": 0.621278,
+              "syn_mean_injury": 0.576734,
+              "real_weight": 0.136448,
+              "abs_error": 0.044544
+            },
+            {
+              "group": "primary_link",
+              "real_mean_injury": 0.555556,
+              "syn_mean_injury": 0.371429,
+              "real_weight": 0.002688,
+              "abs_error": 0.184127
+            },
+            {
+              "group": "residential",
+              "real_mean_injury": 0.499852,
+              "syn_mean_injury": 0.399216,
+              "real_weight": 0.404086,
+              "abs_error": 0.100636
+            },
+            {
+              "group": "secondary",
+              "real_mean_injury": 0.637476,
+              "syn_mean_injury": 0.539565,
+              "real_weight": 0.214887,
+              "abs_error": 0.097911
+            },
+            {
+              "group": "secondary_link",
+              "real_mean_injury": 0.764706,
+              "syn_mean_injury": 0.48,
+              "real_weight": 0.003047,
+              "abs_error": 0.284706
+            },
+            {
+              "group": "service",
+              "real_mean_injury": 0.442991,
+              "syn_mean_injury": 0.285714,
+              "real_weight": 0.031961,
+              "abs_error": 0.157276
+            },
+            {
+              "group": "tertiary",
+              "real_mean_injury": 0.649689,
+              "syn_mean_injury": 0.479624,
+              "real_weight": 0.096183,
+              "abs_error": 0.170066
+            },
+            {
+              "group": "tertiary_link",
+              "real_mean_injury": 0.75,
+              "syn_mean_injury": 0.4,
+              "real_weight": 0.000478,
+              "abs_error": 0.35
+            },
+            {
+              "group": "trunk",
+              "real_mean_injury": 0.64,
+              "syn_mean_injury": 0.5,
+              "real_weight": 0.005974,
+              "abs_error": 0.14
+            },
+            {
+              "group": "trunk_link",
+              "real_mean_injury": 0.333333,
+              "syn_mean_injury": 0.8,
+              "real_weight": 0.000358,
+              "abs_error": 0.466667
+            },
+            {
+              "group": "unclassified",
+              "real_mean_injury": 0.520468,
+              "syn_mean_injury": 0.425926,
+              "real_weight": 0.010216,
+              "abs_error": 0.094542
+            }
+          ],
+          "real_cmi": 0.252569,
+          "syn_cmi": 0.101779,
+          "cmi_abs_error": 0.150789,
+          "cmi_rel_error": 0.597023,
+          "cond_cols": [
+            "LATITUDE",
+            "LONGITUDE"
+          ]
+        },
+        {
+          "relation": "road_to_injury",
+          "parent_col": "DIST_TO_SIGNAL_M",
+          "kind": "numeric_bin",
+          "status": "ok",
+          "n_groups_real": 5,
+          "n_groups_syn": 5,
+          "weighted_mean_abs_error": 0.103918,
+          "max_abs_error": 0.127867,
+          "group_details": [
+            {
+              "group": "(-inf, 1.194]",
+              "real_mean_injury": 0.667065,
+              "syn_mean_injury": 0.540212,
+              "real_weight": 0.200072,
+              "abs_error": 0.126853
+            },
+            {
+              "group": "(1.194, 8.213]",
+              "real_mean_injury": 0.653031,
+              "syn_mean_injury": 0.546,
+              "real_weight": 0.200072,
+              "abs_error": 0.107031
+            },
+            {
+              "group": "(105.443, inf]",
+              "real_mean_injury": 0.565114,
+              "syn_mean_injury": 0.462628,
+              "real_weight": 0.200012,
+              "abs_error": 0.102485
+            },
+            {
+              "group": "(48.777, 105.443]",
+              "real_mean_injury": 0.521505,
+              "syn_mean_injury": 0.393638,
+              "real_weight": 0.200012,
+              "abs_error": 0.127867
+            },
+            {
+              "group": "(8.213, 48.777]",
+              "real_mean_injury": 0.541405,
+              "syn_mean_injury": 0.486104,
+              "real_weight": 0.199833,
+              "abs_error": 0.055301
+            }
+          ],
+          "real_cmi": 0.232109,
+          "syn_cmi": 0.097017,
+          "cmi_abs_error": 0.135092,
+          "cmi_rel_error": 0.582019,
+          "cond_cols": [
+            "LATITUDE",
+            "LONGITUDE"
+          ]
+        },
+        {
+          "relation": "road_to_injury",
+          "parent_col": "INFERRED_LANES",
+          "kind": "numeric_bin",
+          "status": "ok",
+          "n_groups_real": 3,
+          "n_groups_syn": 3,
+          "weighted_mean_abs_error": 0.104503,
+          "max_abs_error": 0.146171,
+          "group_details": [
+            {
+              "group": "(-inf, 2.0]",
+              "real_mean_injury": 0.560577,
+              "syn_mean_injury": 0.453493,
+              "real_weight": 0.749507,
+              "abs_error": 0.107084
+            },
+            {
+              "group": "(2.0, 3.0]",
+              "real_mean_injury": 0.733148,
+              "syn_mean_injury": 0.586977,
+              "real_weight": 0.107235,
+              "abs_error": 0.146171
+            },
+            {
+              "group": "(3.0, inf]",
+              "real_mean_injury": 0.634279,
+              "syn_mean_injury": 0.574468,
+              "real_weight": 0.143258,
+              "abs_error": 0.05981
+            }
+          ],
+          "real_cmi": 0.246052,
+          "syn_cmi": 0.109112,
+          "cmi_abs_error": 0.13694,
+          "cmi_rel_error": 0.556549,
+          "cond_cols": [
+            "LATITUDE",
+            "LONGITUDE"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_sedan",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.103802,
+          "max_abs_error": 0.12367,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.601333,
+              "syn_mean_injury": 0.52584,
+              "real_weight": 0.41239,
+              "abs_error": 0.075492
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.581436,
+              "syn_mean_injury": 0.457765,
+              "real_weight": 0.58761,
+              "abs_error": 0.12367
+            }
+          ],
+          "real_cmi": 0.951568,
+          "syn_cmi": 0.925245,
+          "cmi_abs_error": 0.026323,
+          "cmi_rel_error": 0.027663,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_suv",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104587,
+          "max_abs_error": 0.1114,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.57908,
+              "syn_mean_injury": 0.480171,
+              "real_weight": 0.545433,
+              "abs_error": 0.098908
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.602313,
+              "syn_mean_injury": 0.490913,
+              "real_weight": 0.454567,
+              "abs_error": 0.1114
+            }
+          ],
+          "real_cmi": 0.949744,
+          "syn_cmi": 0.909894,
+          "cmi_abs_error": 0.03985,
+          "cmi_rel_error": 0.041959,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_taxi",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.103895,
+          "max_abs_error": 0.107197,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.584152,
+              "syn_mean_injury": 0.480412,
+              "real_weight": 0.955194,
+              "abs_error": 0.10374
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.706667,
+              "syn_mean_injury": 0.599469,
+              "real_weight": 0.044806,
+              "abs_error": 0.107197
+            }
+          ],
+          "real_cmi": 0.938913,
+          "syn_cmi": 0.923267,
+          "cmi_abs_error": 0.015646,
+          "cmi_rel_error": 0.016664,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_truck",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104974,
+          "max_abs_error": 0.106843,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.594449,
+              "syn_mean_injury": 0.487606,
+              "real_weight": 0.899755,
+              "abs_error": 0.106843
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.546484,
+              "syn_mean_injury": 0.458288,
+              "real_weight": 0.100245,
+              "abs_error": 0.088196
+            }
+          ],
+          "real_cmi": 0.943197,
+          "syn_cmi": 0.919785,
+          "cmi_abs_error": 0.023411,
+          "cmi_rel_error": 0.024821,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_bus",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.103907,
+          "max_abs_error": 0.164702,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.593918,
+              "syn_mean_injury": 0.49224,
+              "real_weight": 0.964633,
+              "abs_error": 0.101678
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.472973,
+              "syn_mean_injury": 0.308271,
+              "real_weight": 0.035367,
+              "abs_error": 0.164702
+            }
+          ],
+          "real_cmi": 0.93983,
+          "syn_cmi": 0.930463,
+          "cmi_abs_error": 0.009367,
+          "cmi_rel_error": 0.009967,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_motorcycle",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.101835,
+          "max_abs_error": 0.1052,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.579199,
+              "syn_mean_injury": 0.473999,
+              "real_weight": 0.960989,
+              "abs_error": 0.1052
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.846861,
+              "syn_mean_injury": 0.827922,
+              "real_weight": 0.039011,
+              "abs_error": 0.018939
+            }
+          ],
+          "real_cmi": 0.95478,
+          "syn_cmi": 0.936775,
+          "cmi_abs_error": 0.018006,
+          "cmi_rel_error": 0.018859,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_bicycle",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.105123,
+          "max_abs_error": 0.112499,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.561378,
+              "syn_mean_injury": 0.448879,
+              "real_weight": 0.915407,
+              "abs_error": 0.112499
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.89548,
+              "syn_mean_injury": 0.870175,
+              "real_weight": 0.084593,
+              "abs_error": 0.025305
+            }
+          ],
+          "real_cmi": 0.992318,
+          "syn_cmi": 0.964251,
+          "cmi_abs_error": 0.028067,
+          "cmi_rel_error": 0.028284,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "vehicle_to_injury",
+          "parent_col": "is_other_vehicle",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104779,
+          "max_abs_error": 0.225696,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.588977,
+              "syn_mean_injury": 0.486001,
+              "real_weight": 0.985304,
+              "abs_error": 0.102976
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.634146,
+              "syn_mean_injury": 0.408451,
+              "real_weight": 0.014696,
+              "abs_error": 0.225696
+            }
+          ],
+          "real_cmi": 0.886087,
+          "syn_cmi": 0.918334,
+          "cmi_abs_error": 0.032246,
+          "cmi_rel_error": 0.036392,
+          "cond_cols": [
+            "TOTAL_VEHICLES"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_distracted",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104936,
+          "max_abs_error": 0.105341,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.584628,
+              "syn_mean_injury": 0.479287,
+              "real_weight": 0.738395,
+              "abs_error": 0.105341
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.603791,
+              "syn_mean_injury": 0.5,
+              "real_weight": 0.261605,
+              "abs_error": 0.103791
+            }
+          ],
+          "real_cmi": 3.38029,
+          "syn_cmi": 3.306513,
+          "cmi_abs_error": 0.073777,
+          "cmi_rel_error": 0.021826,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_speeding",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.103459,
+          "max_abs_error": 0.234893,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.576173,
+              "syn_mean_injury": 0.47887,
+              "real_weight": 0.955254,
+              "abs_error": 0.097302
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.87717,
+              "syn_mean_injury": 0.642276,
+              "real_weight": 0.044746,
+              "abs_error": 0.234893
+            }
+          ],
+          "real_cmi": 3.443506,
+          "syn_cmi": 3.363642,
+          "cmi_abs_error": 0.079864,
+          "cmi_rel_error": 0.023193,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_failure_to_yield",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.102203,
+          "max_abs_error": 0.103324,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.562508,
+              "syn_mean_injury": 0.459184,
+              "real_weight": 0.924189,
+              "abs_error": 0.103324
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.92041,
+              "syn_mean_injury": 0.831884,
+              "real_weight": 0.075811,
+              "abs_error": 0.088526
+            }
+          ],
+          "real_cmi": 3.436855,
+          "syn_cmi": 3.348726,
+          "cmi_abs_error": 0.088129,
+          "cmi_rel_error": 0.025642,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_following_too_closely",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104862,
+          "max_abs_error": 0.111988,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.604214,
+              "syn_mean_injury": 0.492227,
+              "real_weight": 0.833503,
+              "abs_error": 0.111988
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.516685,
+              "syn_mean_injury": 0.447497,
+              "real_weight": 0.166497,
+              "abs_error": 0.069188
+            }
+          ],
+          "real_cmi": 3.399603,
+          "syn_cmi": 3.327252,
+          "cmi_abs_error": 0.07235,
+          "cmi_rel_error": 0.021282,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_drunk_driving",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104717,
+          "max_abs_error": 0.163689,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.588766,
+              "syn_mean_injury": 0.485279,
+              "real_weight": 0.979569,
+              "abs_error": 0.103487
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.631579,
+              "syn_mean_injury": 0.46789,
+              "real_weight": 0.020431,
+              "abs_error": 0.163689
+            }
+          ],
+          "real_cmi": 3.34748,
+          "syn_cmi": 3.264183,
+          "cmi_abs_error": 0.083296,
+          "cmi_rel_error": 0.024883,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_fatigue",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.106448,
+          "max_abs_error": 0.220404,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.589753,
+              "syn_mean_injury": 0.48379,
+              "real_weight": 0.995758,
+              "abs_error": 0.105963
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.56338,
+              "syn_mean_injury": 0.783784,
+              "real_weight": 0.004242,
+              "abs_error": 0.220404
+            }
+          ],
+          "real_cmi": 2.747656,
+          "syn_cmi": 2.531136,
+          "cmi_abs_error": 0.216521,
+          "cmi_rel_error": 0.078802,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_view_obstructed",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.10512,
+          "max_abs_error": 0.105969,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.588296,
+              "syn_mean_injury": 0.482327,
+              "real_weight": 0.990203,
+              "abs_error": 0.105969
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.72561,
+              "syn_mean_injury": 0.744898,
+              "real_weight": 0.009797,
+              "abs_error": 0.019288
+            }
+          ],
+          "real_cmi": 3.222125,
+          "syn_cmi": 3.023463,
+          "cmi_abs_error": 0.198662,
+          "cmi_rel_error": 0.061656,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_vehicle_defect",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104871,
+          "max_abs_error": 0.105513,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.58955,
+              "syn_mean_injury": 0.484037,
+              "real_weight": 0.991338,
+              "abs_error": 0.105513
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.6,
+              "syn_mean_injury": 0.568627,
+              "real_weight": 0.008662,
+              "abs_error": 0.031373
+            }
+          ],
+          "real_cmi": 3.157054,
+          "syn_cmi": 2.996046,
+          "cmi_abs_error": 0.161008,
+          "cmi_rel_error": 0.050999,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_backing_unsafely",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.103828,
+          "max_abs_error": 0.106156,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.59984,
+              "syn_mean_injury": 0.493684,
+              "real_weight": 0.969353,
+              "abs_error": 0.106156
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.267057,
+              "syn_mean_injury": 0.236842,
+              "real_weight": 0.030647,
+              "abs_error": 0.030214
+            }
+          ],
+          "real_cmi": 3.347894,
+          "syn_cmi": 3.277804,
+          "cmi_abs_error": 0.07009,
+          "cmi_rel_error": 0.020935,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_pedestrian_related",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.106004,
+          "max_abs_error": 0.106912,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.585412,
+              "syn_mean_injury": 0.4785,
+              "real_weight": 0.986917,
+              "abs_error": 0.106912
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.908676,
+              "syn_mean_injury": 0.871166,
+              "real_weight": 0.013083,
+              "abs_error": 0.03751
+            }
+          ],
+          "real_cmi": 3.137482,
+          "syn_cmi": 3.074905,
+          "cmi_abs_error": 0.062577,
+          "cmi_rel_error": 0.019945,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_inexperience",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.104802,
+          "max_abs_error": 0.20984,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.587598,
+              "syn_mean_injury": 0.485387,
+              "real_weight": 0.975924,
+              "abs_error": 0.102211
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.672457,
+              "syn_mean_injury": 0.462617,
+              "real_weight": 0.024076,
+              "abs_error": 0.20984
+            }
+          ],
+          "real_cmi": 3.428328,
+          "syn_cmi": 3.262485,
+          "cmi_abs_error": 0.165843,
+          "cmi_rel_error": 0.048374,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        },
+        {
+          "relation": "crash_type_to_injury",
+          "parent_col": "is_pavement_slippery",
+          "kind": "categorical",
+          "status": "ok",
+          "n_groups_real": 2,
+          "n_groups_syn": 2,
+          "weighted_mean_abs_error": 0.10472,
+          "max_abs_error": 0.145824,
+          "group_details": [
+            {
+              "group": "0",
+              "real_mean_injury": 0.588614,
+              "syn_mean_injury": 0.484153,
+              "real_weight": 0.993727,
+              "abs_error": 0.10446
+            },
+            {
+              "group": "1",
+              "real_mean_injury": 0.752381,
+              "syn_mean_injury": 0.606557,
+              "real_weight": 0.006273,
+              "abs_error": 0.145824
+            }
+          ],
+          "real_cmi": 2.887161,
+          "syn_cmi": 2.742913,
+          "cmi_abs_error": 0.144247,
+          "cmi_rel_error": 0.049962,
+          "cond_cols": [
+            "WEATHER_CONDITION",
+            "OSM_TYPE",
+            "TOTAL_VEHICLES",
+            "IS_MULTI_VEHICLE"
+          ]
+        }
+      ]
+    }
+  }
+}
