@@ -1,0 +1,75 @@
+# .gitignore — HC-DiffTraffic 项目
+
+# ===== 数据文件（体积过大）=====
+*.npy
+*.npy.gz
+*.h5
+*.hdf5
+*.parquet
+
+# ===== 大型原始 CSV =====
+nyc_accidents_*.csv
+nyc_2017_*.csv
+nyc_2024_*.csv
+nyc_2025_*.csv
+*_pristine_*.csv
+*_speedfix.csv
+*_backup_*.csv
+
+# ===== Checkpoint / 模型权重 =====
+*.pt
+*.pth
+*.bin
+*.pkl
+*.joblib
+ckpt/
+tuned_models/
+
+# ===== 大型合成结果 =====
+results/synth_*.csv
+results/synthetic/
+synthetic/
+
+# ===== 训练运行日志（大型）=====
+swanlog/
+runs/
+*.log
+build_2025_like_2017.log
+train_*.log
+prepare_*.log
+run_v2_*.log
+v2_*.log
+transfer_eval.log
+postcovid_transfer_*.log
+osm_build.log
+
+# ===== 缓存 =====
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+cache/
+.cache/
+catboost_info/
+osmdata/
+
+# ===== IDE / OS =====
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ===== Python 打包 =====
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ===== 临时 / 诊断文件 =====
+*.tmp
+*.bak
+
+# ===== 因果矩阵 .npy（保留 .csv 和 .json，不保留 .npy）=====
+configs/causal_matrix_*.npy

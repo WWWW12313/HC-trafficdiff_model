@@ -1,0 +1,42 @@
+[
+  {
+    "x_col": "LATITUDE",
+    "y_col": "LONGITUDE",
+    "cond_cols": ["SEASON", "TIME_PERIOD"]
+  },
+  {
+    "x_col": "TEMP_C",
+    "y_col": "prcp",
+    "cond_cols": ["SEASON", "coco"]
+  },
+  {
+    "x_col": "WIND_SPEED_KMH",
+    "y_col": "prcp",
+    "cond_cols": ["SEASON", "coco"]
+  },
+  {
+    "x_col": "DIST_TO_SIGNAL_M",
+    "y_col": "INFERRED_LANES",
+    "cond_cols": ["HAS_TRAFFIC_SIGNAL", "OSM_ONEWAY"]
+  },
+  {
+    "x_col": "CRASH_TIME_SIN",
+    "y_col": "CRASH_TIME_COS",
+    "cond_cols": ["TIME_PERIOD", "DAY_OF_WEEK"]
+  },
+  {
+    "x_col": "is_speeding",
+    "y_col": "is_following_too_closely",
+    "cond_cols": ["TIME_PERIOD", "WEATHER_CONDITION"]
+  },
+  {
+    "x_col": "is_pedestrian_related",
+    "y_col": "NUMBER_OF_PEDESTRIANS_INJURED_BIN",
+    "cond_cols": ["TIME_PERIOD", "HAS_TRAFFIC_SIGNAL"]
+  },
+  {
+    "x_col": "TOTAL_VEHICLES",
+    "y_col": "IS_MULTI_VEHICLE",
+    "cond_cols": ["TIME_PERIOD", "DAY_OF_WEEK"]
+  }
+]

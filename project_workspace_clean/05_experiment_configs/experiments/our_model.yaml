@@ -1,0 +1,12 @@
+# CausalDiffTab experiment config
+model_name: our_model
+experiment_id: our_model_h3r8_weather
+lambda_causal: 1.0
+use_causal_masks: true
+hierarchical: true
+train_stage2: true
+description: 最新主模型：Stage1 生成 ROAD_H3_CELL(res=8)+时间锚点，H3 road-cell 解码坐标，deterministic OSM road context，因果条件天气机制，Stage3 生成事故微观变量
+sampling:
+  mode: chain_stage123
+  num_samples: null
+  impute_indices_count: 2000
