@@ -1,0 +1,574 @@
+{
+  "data_a": "data/nyc_crash_2024_v2",
+  "data_b": "data/nyc_crash_2025_v2",
+  "n_rows_a": 83691,
+  "n_rows_b": 82698,
+  "target": "NUMBER OF PERSONS INJURED",
+  "numeric_features": {
+    "LATITUDE": {
+      "wasserstein": 0.000568,
+      "wasserstein_normalized": 0.007014,
+      "ks_statistic": 0.006635,
+      "ks_pvalue": 0.051141,
+      "mean_a": 40.72072,
+      "mean_b": 40.720903,
+      "std_a": 0.081132,
+      "std_b": 0.080773
+    },
+    "LONGITUDE": {
+      "wasserstein": 0.002047,
+      "wasserstein_normalized": 0.023231,
+      "ks_statistic": 0.01888,
+      "ks_pvalue": 0.0,
+      "mean_a": -73.919918,
+      "mean_b": -73.918223,
+      "std_a": 0.087299,
+      "std_b": 0.088957
+    },
+    "CRASH_TIME_SIN": {
+      "wasserstein": 0.001866,
+      "wasserstein_normalized": 0.002682,
+      "ks_statistic": 0.002487,
+      "ks_pvalue": 0.95862,
+      "mean_a": -0.154073,
+      "mean_b": -0.154605,
+      "std_a": 0.696129,
+      "std_b": 0.695279
+    },
+    "CRASH_TIME_COS": {
+      "wasserstein": 0.004938,
+      "wasserstein_normalized": 0.007194,
+      "ks_statistic": 0.00452,
+      "ks_pvalue": 0.362169,
+      "mean_a": -0.142574,
+      "mean_b": -0.147316,
+      "std_a": 0.686541,
+      "std_b": 0.686282
+    },
+    "TEMP_C": {
+      "wasserstein": 0.859478,
+      "wasserstein_normalized": 0.082555,
+      "ks_statistic": 0.043826,
+      "ks_pvalue": 0.0,
+      "mean_a": 13.396731,
+      "mean_b": 13.602987,
+      "std_a": 9.992815,
+      "std_b": 10.812987
+    },
+    "prcp": {
+      "wasserstein": 0.010561,
+      "wasserstein_normalized": 0.014715,
+      "ks_statistic": 0.00573,
+      "ks_pvalue": 0.12969,
+      "mean_a": 0.142144,
+      "mean_b": 0.143692,
+      "std_a": 0.731888,
+      "std_b": 0.703154
+    },
+    "WIND_SPEED_KMH": {
+      "wasserstein": 2.510956,
+      "wasserstein_normalized": 0.417444,
+      "ks_statistic": 0.154361,
+      "ks_pvalue": 0.0,
+      "mean_a": 12.733216,
+      "mean_b": 10.222453,
+      "std_a": 6.589046,
+      "std_b": 5.380223
+    },
+    "DIST_TO_SIGNAL_M": {
+      "wasserstein": 3.964938,
+      "wasserstein_normalized": 0.036658,
+      "ks_statistic": 0.061875,
+      "ks_pvalue": 0.0,
+      "mean_a": 65.791779,
+      "mean_b": 69.362134,
+      "std_a": 106.198359,
+      "std_b": 110.089709
+    },
+    "INFERRED_LANES": {
+      "wasserstein": 0.041963,
+      "wasserstein_normalized": 0.033632,
+      "ks_statistic": 0.01848,
+      "ks_pvalue": 0.0,
+      "mean_a": 1.911305,
+      "mean_b": 1.869392,
+      "std_a": 1.260582,
+      "std_b": 1.234644
+    },
+    "IS_WEEKEND": {
+      "wasserstein": 0.000956,
+      "wasserstein_normalized": 0.002149,
+      "ks_statistic": 0.000956,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.271881,
+      "mean_b": 0.270926,
+      "std_a": 0.444929,
+      "std_b": 0.444438
+    },
+    "IS_AM_PEAK": {
+      "wasserstein": 0.001812,
+      "wasserstein_normalized": 0.005274,
+      "ks_statistic": 0.001812,
+      "ks_pvalue": 0.999162,
+      "mean_a": 0.135773,
+      "mean_b": 0.137585,
+      "std_a": 0.342548,
+      "std_b": 0.344464
+    },
+    "IS_PM_PEAK": {
+      "wasserstein": 0.001331,
+      "wasserstein_normalized": 0.003555,
+      "ks_statistic": 0.001331,
+      "ks_pvalue": 0.999999,
+      "mean_a": 0.169134,
+      "mean_b": 0.167803,
+      "std_a": 0.37487,
+      "std_b": 0.373692
+    },
+    "HAS_TRAFFIC_SIGNAL": {
+      "wasserstein": 0.022022,
+      "wasserstein_normalized": 0.044073,
+      "ks_statistic": 0.022022,
+      "ks_pvalue": 0.0,
+      "mean_a": 0.525528,
+      "mean_b": 0.503507,
+      "std_a": 0.499348,
+      "std_b": 0.499988
+    },
+    "OSM_ONEWAY": {
+      "wasserstein": 0.004628,
+      "wasserstein_normalized": 0.00927,
+      "ks_statistic": 0.004628,
+      "ks_pvalue": 0.333977,
+      "mean_a": 0.471042,
+      "mean_b": 0.475671,
+      "std_a": 0.499161,
+      "std_b": 0.499408
+    },
+    "is_sedan": {
+      "wasserstein": 0.00086,
+      "wasserstein_normalized": 0.001744,
+      "ks_statistic": 0.00086,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.581914,
+      "mean_b": 0.581054,
+      "std_a": 0.493244,
+      "std_b": 0.493387
+    },
+    "is_suv": {
+      "wasserstein": 0.012009,
+      "wasserstein_normalized": 0.024131,
+      "ks_statistic": 0.012009,
+      "ks_pvalue": 1.2e-05,
+      "mean_a": 0.458078,
+      "mean_b": 0.446069,
+      "std_a": 0.498239,
+      "std_b": 0.497083
+    },
+    "is_taxi": {
+      "wasserstein": 0.001789,
+      "wasserstein_normalized": 0.008708,
+      "ks_statistic": 0.001789,
+      "ks_pvalue": 0.999323,
+      "mean_a": 0.043278,
+      "mean_b": 0.045068,
+      "std_a": 0.203483,
+      "std_b": 0.207452
+    },
+    "is_truck": {
+      "wasserstein": 0.003275,
+      "wasserstein_normalized": 0.010813,
+      "ks_statistic": 0.003275,
+      "ks_pvalue": 0.762525,
+      "mean_a": 0.100513,
+      "mean_b": 0.103787,
+      "std_a": 0.300682,
+      "std_b": 0.304984
+    },
+    "is_bus": {
+      "wasserstein": 0.000857,
+      "wasserstein_normalized": 0.004451,
+      "ks_statistic": 0.000857,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.038164,
+      "mean_b": 0.039021,
+      "std_a": 0.191593,
+      "std_b": 0.193646
+    },
+    "is_motorcycle": {
+      "wasserstein": 0.008515,
+      "wasserstein_normalized": 0.046466,
+      "ks_statistic": 0.008515,
+      "ks_pvalue": 0.004772,
+      "mean_a": 0.039072,
+      "mean_b": 0.030557,
+      "std_a": 0.193767,
+      "std_b": 0.172114
+    },
+    "is_bicycle": {
+      "wasserstein": 0.000251,
+      "wasserstein_normalized": 0.00092,
+      "ks_statistic": 0.000251,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.080845,
+      "mean_b": 0.080594,
+      "std_a": 0.272597,
+      "std_b": 0.272211
+    },
+    "is_other_vehicle": {
+      "wasserstein": 0.003255,
+      "wasserstein_normalized": 0.026044,
+      "ks_statistic": 0.003255,
+      "ks_pvalue": 0.769095,
+      "mean_a": 0.014243,
+      "mean_b": 0.017497,
+      "std_a": 0.118491,
+      "std_b": 0.131115
+    },
+    "is_distracted": {
+      "wasserstein": 0.002194,
+      "wasserstein_normalized": 0.004963,
+      "ks_statistic": 0.002194,
+      "ks_pvalue": 0.98793,
+      "mean_a": 0.265309,
+      "mean_b": 0.267503,
+      "std_a": 0.441498,
+      "std_b": 0.442657
+    },
+    "is_speeding": {
+      "wasserstein": 0.004009,
+      "wasserstein_normalized": 0.020276,
+      "ks_statistic": 0.004009,
+      "ks_pvalue": 0.514434,
+      "mean_a": 0.042764,
+      "mean_b": 0.038755,
+      "std_a": 0.202326,
+      "std_b": 0.193012
+    },
+    "is_failure_to_yield": {
+      "wasserstein": 0.001769,
+      "wasserstein_normalized": 0.006784,
+      "ks_statistic": 0.001769,
+      "ks_pvalue": 0.999448,
+      "mean_a": 0.074249,
+      "mean_b": 0.072481,
+      "std_a": 0.262176,
+      "std_b": 0.259282
+    },
+    "is_following_too_closely": {
+      "wasserstein": 0.002925,
+      "wasserstein_normalized": 0.007909,
+      "ks_statistic": 0.002925,
+      "ks_pvalue": 0.867863,
+      "mean_a": 0.161989,
+      "mean_b": 0.164913,
+      "std_a": 0.36844,
+      "std_b": 0.371102
+    },
+    "is_drunk_driving": {
+      "wasserstein": 0.000882,
+      "wasserstein_normalized": 0.006188,
+      "ks_statistic": 0.000882,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.021197,
+      "mean_b": 0.020315,
+      "std_a": 0.144041,
+      "std_b": 0.141075
+    },
+    "is_fatigue": {
+      "wasserstein": 0.00075,
+      "wasserstein_normalized": 0.010197,
+      "ks_statistic": 0.00075,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.005066,
+      "mean_b": 0.005816,
+      "std_a": 0.070997,
+      "std_b": 0.076043
+    },
+    "is_view_obstructed": {
+      "wasserstein": 0.000519,
+      "wasserstein_normalized": 0.004916,
+      "ks_statistic": 0.000519,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.011029,
+      "mean_b": 0.011548,
+      "std_a": 0.104437,
+      "std_b": 0.10684
+    },
+    "is_vehicle_defect": {
+      "wasserstein": 0.000537,
+      "wasserstein_normalized": 0.005473,
+      "ks_statistic": 0.000537,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.009439,
+      "mean_b": 0.009976,
+      "std_a": 0.096697,
+      "std_b": 0.099381
+    },
+    "is_backing_unsafely": {
+      "wasserstein": 0.001231,
+      "wasserstein_normalized": 0.007008,
+      "ks_statistic": 0.001231,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.032465,
+      "mean_b": 0.031234,
+      "std_a": 0.177231,
+      "std_b": 0.17395
+    },
+    "is_pedestrian_related": {
+      "wasserstein": 0.000663,
+      "wasserstein_normalized": 0.005594,
+      "ks_statistic": 0.000663,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.013908,
+      "mean_b": 0.014571,
+      "std_a": 0.11711,
+      "std_b": 0.119828
+    },
+    "is_inexperience": {
+      "wasserstein": 0.001227,
+      "wasserstein_normalized": 0.007822,
+      "ks_statistic": 0.001227,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.024614,
+      "mean_b": 0.025841,
+      "std_a": 0.154947,
+      "std_b": 0.158661
+    },
+    "is_pavement_slippery": {
+      "wasserstein": 0.000643,
+      "wasserstein_normalized": 0.007437,
+      "ks_statistic": 0.000643,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.007205,
+      "mean_b": 0.007848,
+      "std_a": 0.084576,
+      "std_b": 0.08824
+    },
+    "NUMBER_OF_PEDESTRIANS_INJURED_BIN": {
+      "wasserstein": 2e-05,
+      "wasserstein_normalized": 6.7e-05,
+      "ks_statistic": 2e-05,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.103416,
+      "mean_b": 0.103437,
+      "std_a": 0.304502,
+      "std_b": 0.304528
+    },
+    "NUMBER_OF_PEDESTRIANS_KILLED_BIN": {
+      "wasserstein": 2.8e-05,
+      "wasserstein_normalized": 0.000764,
+      "ks_statistic": 2.8e-05,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.00129,
+      "mean_b": 0.001318,
+      "std_a": 0.0359,
+      "std_b": 0.036281
+    },
+    "NUMBER_OF_CYCLIST_INJURED_BIN": {
+      "wasserstein": 0.005419,
+      "wasserstein_normalized": 0.023141,
+      "ks_statistic": 0.005419,
+      "ks_pvalue": 0.17307,
+      "mean_a": 0.055526,
+      "mean_b": 0.060945,
+      "std_a": 0.229003,
+      "std_b": 0.239229
+    },
+    "NUMBER_OF_CYCLIST_KILLED_BIN": {
+      "wasserstein": 2.1e-05,
+      "wasserstein_normalized": 0.001285,
+      "ks_statistic": 2.1e-05,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.000275,
+      "mean_b": 0.000254,
+      "std_a": 0.016575,
+      "std_b": 0.015933
+    },
+    "NUMBER_OF_MOTORIST_INJURED_BIN": {
+      "wasserstein": 0.001464,
+      "wasserstein_normalized": 0.003328,
+      "ks_statistic": 0.001464,
+      "ks_pvalue": 0.999991,
+      "mean_a": 0.2628,
+      "mean_b": 0.261336,
+      "std_a": 0.440155,
+      "std_b": 0.439363
+    },
+    "NUMBER_OF_MOTORIST_KILLED_BIN": {
+      "wasserstein": 0.000134,
+      "wasserstein_normalized": 0.004555,
+      "ks_statistic": 0.000134,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.000932,
+      "mean_b": 0.000798,
+      "std_a": 0.030514,
+      "std_b": 0.028239
+    },
+    "TOTAL_VEHICLES": {
+      "wasserstein": 0.010374,
+      "wasserstein_normalized": 0.015278,
+      "ks_statistic": 0.005954,
+      "ks_pvalue": 0.104311,
+      "mean_a": 1.770238,
+      "mean_b": 1.760538,
+      "std_a": 0.688506,
+      "std_b": 0.669366
+    },
+    "IS_MULTI_VEHICLE": {
+      "wasserstein": 0.000337,
+      "wasserstein_normalized": 0.000711,
+      "ks_statistic": 0.000337,
+      "ks_pvalue": 1.0,
+      "mean_a": 0.658482,
+      "mean_b": 0.658819,
+      "std_a": 0.474219,
+      "std_b": 0.474106
+    }
+  },
+  "categorical_features": {
+    "SEASON": {
+      "js_divergence": 0.018331,
+      "n_categories": 4,
+      "categories": [
+        "autumn",
+        "spring",
+        "summer",
+        "winter"
+      ]
+    },
+    "WEATHER_CONDITION": {
+      "js_divergence": 0.024635,
+      "n_categories": 4,
+      "categories": [
+        "Clear",
+        "Cloudy",
+        "Rain",
+        "Snow"
+      ]
+    },
+    "OSM_TYPE": {
+      "js_divergence": 0.038441,
+      "n_categories": 16,
+      "categories": [
+        "busway",
+        "living_street",
+        "motorway",
+        "motorway_link",
+        "pedestrian",
+        "primary",
+        "primary_link",
+        "residential",
+        "secondary",
+        "secondary_link",
+        "service",
+        "tertiary",
+        "tertiary_link",
+        "trunk",
+        "trunk_link",
+        "unclassified"
+      ]
+    }
+  },
+  "concept_drift": {
+    "overall_mean_a": 0.58716,
+    "overall_mean_b": 0.583605,
+    "overall_abs_diff": 0.003555,
+    "wasserstein": 0.005285
+  },
+  "macro_relation_drift": {
+    "n_groups_a": 189,
+    "n_groups_b": 194,
+    "n_common_groups": 181,
+    "mean_abs_diff": 0.236118,
+    "max_abs_diff": 2.8,
+    "top_drift_groups": [
+      {
+        "SEASON": "summer",
+        "WEATHER_CONDITION": "Cloudy",
+        "OSM_TYPE": "trunk_link",
+        "mean_a": 0.2,
+        "mean_b": 3.0,
+        "abs_diff": 2.8
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Snow",
+        "OSM_TYPE": "motorway",
+        "mean_a": 0.0,
+        "mean_b": 2.0,
+        "abs_diff": 2.0
+      },
+      {
+        "SEASON": "winter",
+        "WEATHER_CONDITION": "Cloudy",
+        "OSM_TYPE": "trunk_link",
+        "mean_a": 2.0,
+        "mean_b": 0.0,
+        "abs_diff": 2.0
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Rain",
+        "OSM_TYPE": "living_street",
+        "mean_a": 0.0,
+        "mean_b": 1.5,
+        "abs_diff": 1.5
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Snow",
+        "OSM_TYPE": "unclassified",
+        "mean_a": 0.0,
+        "mean_b": 1.5,
+        "abs_diff": 1.5
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Cloudy",
+        "OSM_TYPE": "pedestrian",
+        "mean_a": 0.0,
+        "mean_b": 1.3333333333333333,
+        "abs_diff": 1.3333333333333333
+      },
+      {
+        "SEASON": "autumn",
+        "WEATHER_CONDITION": "Rain",
+        "OSM_TYPE": "pedestrian",
+        "mean_a": 0.0,
+        "mean_b": 1.0,
+        "abs_diff": 1.0
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Clear",
+        "OSM_TYPE": "pedestrian",
+        "mean_a": 1.0,
+        "mean_b": 0.0,
+        "abs_diff": 1.0
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Rain",
+        "OSM_TYPE": "busway",
+        "mean_a": 1.0,
+        "mean_b": 0.0,
+        "abs_diff": 1.0
+      },
+      {
+        "SEASON": "spring",
+        "WEATHER_CONDITION": "Snow",
+        "OSM_TYPE": "trunk",
+        "mean_a": 0.0,
+        "mean_b": 1.0,
+        "abs_diff": 1.0
+      }
+    ]
+  },
+  "summary": {
+    "mean_numeric_wasserstein_normalized": 0.022772,
+    "max_numeric_wasserstein_normalized": 0.417444,
+    "mean_categorical_js_divergence": 0.027136,
+    "max_categorical_js_divergence": 0.038441
+  }
+}
