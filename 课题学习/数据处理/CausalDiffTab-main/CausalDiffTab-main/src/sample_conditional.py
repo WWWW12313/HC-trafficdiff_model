@@ -297,12 +297,79 @@ def build_stage_impute_masks(
         cat_mask_idx = [i for i, c in enumerate(cat_col_names) if c in target_cat]
     elif impute_stage == "stage3":
         target_cat = set(column_groups.get("stage3_categorical", []))
+        # 排除 proxy 列，改为后置计算以避免 proxy 泄漏
+        PROXY_COLS = {
+            "TOTAL_VEHICLES", "IS_MULTI_VEHICLE",
+            "NUMBER_OF_PEDESTRIANS_INJURED_BIN", "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+            "NUMBER_OF_CYCLIST_INJURED_BIN", "NUMBER_OF_CYCLIST_KILLED_BIN",
+            "NUMBER_OF_MOTORIST_INJURED_BIN", "NUMBER_OF_MOTORIST_KILLED_BIN",
+        }
+        target_cat = target_cat - PROXY_COLS
         cat_mask_idx = [i for i, c in enumerate(cat_col_names) if c in target_cat]
         num_mask_idx = [0]
     else:
         raise ValueError(f"Unsupported impute_stage={impute_stage!r}")
 
     return num_mask_idx, cat_mask_idx
+
+
+def _compute_proxy_columns(df: pd.DataFrame, info: dict) -> pd.DataFrame:
+    """
+    采样后后置计算 proxy 列，替代扩散模型直接生成。
+    消除 proxy 泄漏：TOTAL_VEHICLES / IS_MULTI_VEHICLE 由 vehicle flags 确定；
+    injury bins 由目标 y 和事故特征启发式推断。
+    """
+    df = df.copy()
+
+    # ── Vehicle-derived proxies ──
+    vehicle_cols = [
+        "is_emergency", "is_taxi", "is_bus", "is_truck",
+        "is_other_vehicle", "is_pickup", "is_van",
+        "is_motorcycle", "is_bicycle", "is_suv", "is_sedan",
+    ]
+    present_vehicle = [c for c in vehicle_cols if c in df.columns]
+    if present_vehicle:
+        for c in present_vehicle:
+            df[c] = (pd.to_numeric(df[c], errors="coerce").fillna(0.0) > 0.5).astype(int)
+        active_count = df[present_vehicle].sum(axis=1).astype(int)
+        # 至少一辆车
+        zero_vehicle = active_count <= 0
+        if zero_vehicle.any():
+            fallback = "is_sedan" if "is_sedan" in present_vehicle else present_vehicle[-1]
+            df.loc[zero_vehicle, fallback] = 1
+            active_count = df[present_vehicle].sum(axis=1).astype(int)
+        df["TOTAL_VEHICLES"] = active_count.clip(1, 5).astype(int)
+        df["IS_MULTI_VEHICLE"] = (df["TOTAL_VEHICLES"] >= 2).astype(int)
+
+    # ── Injury BIN proxies (heuristic, based on target y and accident features) ──
+    target_col = info.get("target_col", "NUMBER OF PERSONS INJURED")
+    y = pd.to_numeric(df.get(target_col, pd.Series(0, index=df.index)), errors="coerce").fillna(0)
+
+    # 基础规则：y <= 0 时所有 injury bins = 0
+    any_injury = (y > 0).astype(int)
+
+    # Pedestrian
+    if "NUMBER_OF_PEDESTRIANS_INJURED_BIN" in df.columns:
+        ped_rel = pd.to_numeric(df.get("is_pedestrian_related", 0), errors="coerce").fillna(0)
+        df["NUMBER_OF_PEDESTRIANS_INJURED_BIN"] = (any_injury & (ped_rel > 0.5)).astype(int)
+    if "NUMBER_OF_PEDESTRIANS_KILLED_BIN" in df.columns:
+        # 死亡概率更低：仅在 y > 2 且与行人相关时
+        df["NUMBER_OF_PEDESTRIANS_KILLED_BIN"] = ((y > 2) & (pd.to_numeric(df.get("is_pedestrian_related", 0), errors="coerce").fillna(0) > 0.5)).astype(int)
+
+    # Cyclist
+    if "NUMBER_OF_CYCLIST_INJURED_BIN" in df.columns:
+        bike = pd.to_numeric(df.get("is_bicycle", 0), errors="coerce").fillna(0)
+        df["NUMBER_OF_CYCLIST_INJURED_BIN"] = (any_injury & (bike > 0.5)).astype(int)
+    if "NUMBER_OF_CYCLIST_KILLED_BIN" in df.columns:
+        df["NUMBER_OF_CYCLIST_KILLED_BIN"] = ((y > 2) & (pd.to_numeric(df.get("is_bicycle", 0), errors="coerce").fillna(0) > 0.5)).astype(int)
+
+    # Motorist (default: likely injured if any accident)
+    if "NUMBER_OF_MOTORIST_INJURED_BIN" in df.columns:
+        df["NUMBER_OF_MOTORIST_INJURED_BIN"] = any_injury.astype(int)
+    if "NUMBER_OF_MOTORIST_KILLED_BIN" in df.columns:
+        df["NUMBER_OF_MOTORIST_KILLED_BIN"] = (y > 2).astype(int)
+
+    return df
 
 
 def _freeze_impute_columns(
@@ -821,6 +888,7 @@ def run_hierarchical_chain_sampling(
     impute_condition: str = "x_0",
     road_graphml: str = None,
     road_signals: str = None,
+    causal_guidance_scale: float = 0.0,
     snap_max_dist_m: float = 300.0,
     recompute_osm_after_snap: bool = True,
 ):
@@ -838,6 +906,9 @@ def run_hierarchical_chain_sampling(
     stage1_diffusion, stage1_dataset, stage1_info = load_model(stage1_ckpt_dir, stage1_data_dir, device)
     stage2_diffusion, stage2_dataset, stage2_info = load_model(stage2_ckpt_dir, stage2_data_dir, device)
     stage3_diffusion, stage3_dataset, stage3_info = load_model(stage3_ckpt_dir, stage3_data_dir, device)
+    if causal_guidance_scale != 0.0:
+        stage3_diffusion.causal_guidance_scale = causal_guidance_scale
+        print(f"[causal_guidance] Stage3 scale={causal_guidance_scale}")
 
     stage2_encoded = load_forward_dataset(stage2_ckpt_dir, stage2_data_dir, stage2_info)
     stage3_encoded = load_forward_dataset(stage3_ckpt_dir, stage3_data_dir, stage3_info)
@@ -929,6 +1000,8 @@ def run_hierarchical_chain_sampling(
         stage3_chunks.append(tensor_to_dataframe(syn_tensor, stage3_dataset, stage3_info))
     syn_df = pd.concat(stage3_chunks, ignore_index=True)
     syn_df = syn_df.drop(columns=list(RETIRED_CONTEXT_COLUMNS), errors="ignore")
+    # 后置计算 proxy 列（消除 proxy 泄漏）
+    syn_df = _compute_proxy_columns(syn_df, stage3_info)
 
     if not output_csv:
         output_dir = os.path.join(str(CDT_ROOT), "result", "nyc_crash", "sampled")
@@ -1155,6 +1228,10 @@ def run_sampling(
     snap_max_dist_m: float = 300.0,
     recompute_osm_after_snap: bool = True,
     impute_stage: str = "stage3",
+    causal_guidance_scale: float = 0.0,
+    macro_guidance_scale: float = 0.0,
+    macro_guidance_mode: str = "absolute",
+    macro_guidance_adaptive_drift_threshold: float = 2.0,
 ):
     """
     完整采样管线:
@@ -1179,6 +1256,42 @@ def run_sampling(
     print("=" * 60)
 
     diffusion, dataset, info = load_model(ckpt_dir, data_dir, device)
+    if causal_guidance_scale != 0.0:
+        diffusion.causal_guidance_scale = causal_guidance_scale
+        print(f"[causal_guidance] scale={causal_guidance_scale}")
+    
+    # Inference-time Macro Guidance
+    if macro_guidance_scale != 0.0:
+        # Auto-configure macro guidance params if missing (checkpoints don't save them)
+        if diffusion.macro_injury_idx is None:
+            diffusion.macro_injury_idx = 0  # y is prepended to num features
+            print(f"[macro_guidance] auto-set macro_injury_idx=0")
+        if diffusion.macro_group_indices is None:
+            cat_names = info.get("cat_col_names", [])
+            group_cols = ["SEASON", "WEATHER_CONDITION", "OSM_TYPE"]
+            diffusion.macro_group_indices = []
+            for col in group_cols:
+                if col in cat_names:
+                    diffusion.macro_group_indices.append(cat_names.index(col))
+            if diffusion.macro_group_indices:
+                print(f"[macro_guidance] auto-set macro_group_indices={diffusion.macro_group_indices} from {group_cols}")
+            else:
+                print(f"[macro_guidance] WARNING: no group columns found in cat_names, skipping")
+        
+        if diffusion.macro_group_indices:
+            group_means_path = CDT_ROOT / "data" / "processed" / "target_group_means.json"
+            if group_means_path.exists():
+                with open(group_means_path, "r", encoding="utf-8") as f:
+                    gm_data = json.load(f)
+                diffusion.macro_guidance_group_means = {r["group_key"]: r["mean"] for r in gm_data.get("group_means", [])}
+                diffusion.macro_guidance_global_mean = gm_data.get("global_mean", 0.0)
+                diffusion.macro_guidance_global_std = gm_data.get("global_std", 1.0)
+                diffusion.macro_guidance_scale = macro_guidance_scale
+                diffusion.macro_guidance_mode = macro_guidance_mode
+                diffusion.macro_guidance_adaptive_drift_threshold = macro_guidance_adaptive_drift_threshold
+                print(f"[macro_guidance] scale={macro_guidance_scale}, mode={macro_guidance_mode}, groups={len(diffusion.macro_guidance_group_means)}, start_step={diffusion.macro_guidance_start_step}")
+            else:
+                print(f"[macro_guidance] WARNING: {group_means_path} not found, skipping")
 
     column_groups_json = str(CDT_ROOT / "data" / "processed" / "column_groups.json")
     with open(column_groups_json, "r", encoding="utf-8") as f:
@@ -1208,6 +1321,7 @@ def run_sampling(
             chunks.append(t_out)
         syn_tensor = torch.cat(chunks, dim=0)
         syn_df = tensor_to_dataframe(syn_tensor, dataset, info)
+        syn_df = _compute_proxy_columns(syn_df, info)
     elif condition_csv is not None:
         stage_idx = build_stage_indices(info, groups)
         print(f"[indices] cond_num: {len(stage_idx['cond_num_idx'])} dims, "
@@ -1219,11 +1333,13 @@ def run_sampling(
             diffusion, dataset, info,
             num_samples=num_samples, batch_size=batch_size,
         )
+        syn_df = _compute_proxy_columns(syn_df, info)
     else:
         syn_df = sample_unconditional(
             diffusion, dataset, info,
             num_samples=num_samples, batch_size=batch_size,
         )
+        syn_df = _compute_proxy_columns(syn_df, info)
 
     if not output_csv:
         output_dir = os.path.join(str(CDT_ROOT), "result", "nyc_crash", "sampled")
@@ -1281,6 +1397,15 @@ def main():
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--output_csv", type=str, default=None)
     parser.add_argument("--no_postprocess", action="store_true")
+    parser.add_argument("--causal_guidance_scale", type=float, default=0.0,
+                        help="Causal Guidance scale (CFG-style). 0=disabled. Typical values: 0.5-2.0")
+    parser.add_argument("--macro_guidance_scale", type=float, default=0.0,
+                        help="Inference-time Macro Guidance scale. 0=disabled. Typical values: 0.5-2.0")
+    parser.add_argument("--macro_guidance_mode", type=str, default="absolute",
+                        choices=["absolute", "relative", "adaptive", "annealed"],
+                        help="Guidance mode: absolute (default), relative, adaptive, annealed")
+    parser.add_argument("--macro_guidance_adaptive_drift_threshold", type=float, default=2.0,
+                        help="Drift threshold for adaptive mode (higher = more tolerance)")
 
     args = parser.parse_args()
 
@@ -1301,6 +1426,10 @@ def main():
         impute_resample_rounds=args.impute_resample_rounds,
         impute_condition=args.impute_condition,
         impute_stage=args.impute_stage,
+        causal_guidance_scale=args.causal_guidance_scale,
+        macro_guidance_scale=args.macro_guidance_scale,
+        macro_guidance_mode=args.macro_guidance_mode,
+        macro_guidance_adaptive_drift_threshold=args.macro_guidance_adaptive_drift_threshold,
     )
 
 

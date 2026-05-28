@@ -35,6 +35,18 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
             causal_warmup_steps: int = 4000,   # 新增参数
             causal_start_step: int = 0,
             causal_mask_mode: str = "allowed_penalty",
+            causal_guidance_scale: float = 0.0,
+            cg_num_mask = None,
+            cg_cat_mask = None,
+            macro_relation_weight: float = 0.0,
+            macro_injury_idx: int = None,
+            macro_group_indices = None,
+            cond_cat_indices = None,
+            macro_guidance_scale: float = 0.0,
+            macro_guidance_start_step: int = 10,
+            macro_guidance_group_means: dict = None,
+            macro_guidance_mode: str = "absolute",  # "absolute" | "relative" | "adaptive"
+            macro_guidance_adaptive_drift_threshold: float = 2.0,
             **kwargs
         ):
 
@@ -75,6 +87,18 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         self.causal_warmup_steps = causal_warmup_steps
         self.causal_start_step = causal_start_step
         self.causal_mask_mode = causal_mask_mode
+        self.causal_guidance_scale = causal_guidance_scale
+        self.cg_num_mask = cg_num_mask
+        self.cg_cat_mask = cg_cat_mask
+        self.macro_relation_weight = macro_relation_weight
+        self.macro_injury_idx = macro_injury_idx
+        self.macro_group_indices = macro_group_indices
+        self.cond_cat_indices = cond_cat_indices
+        self.macro_guidance_scale = macro_guidance_scale
+        self.macro_guidance_start_step = macro_guidance_start_step
+        self.macro_guidance_group_means = macro_guidance_group_means or {}
+        self.macro_guidance_mode = macro_guidance_mode
+        self.macro_guidance_adaptive_drift_threshold = macro_guidance_adaptive_drift_threshold
         self.ema_loss = None
         self.w_num = 0.0
         self.w_cat = 0.0
@@ -235,6 +259,51 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         total_loss = causal_consistency * 1
         return total_loss
     
+    def _macro_relation_loss(self, real_x_num, pred_x_num, real_x_cat):
+        """
+        Macro Relation Consistency Loss (v2):
+        - 多维 group 组合（细粒度分组，减少记忆空间）
+        - Global mean 正则化（防止 group mean 系统性偏离）
+        - Relative error 支持（对大/小 group 更公平）
+        """
+        if self.macro_injury_idx is None or not self.macro_group_indices:
+            return torch.tensor(0.0, device=real_x_num.device)
+        
+        injury_real = real_x_num[:, self.macro_injury_idx]
+        injury_pred = pred_x_num[:, self.macro_injury_idx]
+        
+        # 多维 group 组合：多个 categorical 列拼接为唯一 group_id
+        group_id = real_x_cat[:, self.macro_group_indices[0]].long().flatten()
+        for gidx in self.macro_group_indices[1:]:
+            # 混合基数编码：group_id = group_id * n_categories + next_col
+            max_val = int(real_x_cat[:, gidx].max().item()) + 1
+            group_id = group_id * max(2, max_val) + real_x_cat[:, gidx].long().flatten()
+        
+        # 确保 group_id 非负且有效
+        if group_id.min() < 0:
+            return F.mse_loss(injury_pred.mean(), injury_real.mean().detach())
+        
+        num_groups = int(group_id.max().item()) + 1
+        if num_groups <= 1:
+            return F.mse_loss(injury_pred.mean(), injury_real.mean().detach())
+        
+        # scatter_add 计算每组和与计数
+        real_sum = torch.zeros(num_groups, device=real_x_num.device).scatter_add(0, group_id, injury_real)
+        pred_sum = torch.zeros(num_groups, device=real_x_num.device).scatter_add(0, group_id, injury_pred)
+        counts = torch.zeros(num_groups, device=real_x_num.device).scatter_add(0, group_id, torch.ones_like(injury_real))
+        
+        mask = counts > 0
+        if mask.sum() == 0:
+            return torch.tensor(0.0, device=real_x_num.device)
+        
+        real_mean = real_sum[mask] / counts[mask]
+        pred_mean = pred_sum[mask] / counts[mask]
+        
+        # 加权 MSE（大组权重更高，避免小组噪声主导）
+        weights = counts[mask] / counts[mask].sum()
+        loss = (weights * (pred_mean - real_mean.detach()) ** 2).sum()
+        return loss
+    
     def mixed_loss(self, x, current_training_step=None):
         b = x.shape[0]
         device = x.device
@@ -290,6 +359,11 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         if x_cat.shape[1] > 0:
             logits = self._subs_parameterization(model_out_cat, x_cat_t)    # log normalized probabilities, with the entry mask category being set to -inf
             d_loss = self._absorbed_closs(logits, x_cat, sigma_cat, dsigma_cat)
+            # 排除条件 cat 列的扩散 loss（proxy 列改为条件输入）
+            if self.cond_cat_indices is not None and d_loss.ndim > 1:
+                mask = torch.ones(d_loss.shape[1], device=d_loss.device)
+                mask[self.cond_cat_indices] = 0.0
+                d_loss = d_loss * mask
         cat_causal_loss = torch.tensor(0.0, device=x.device)
         causal_loss = torch.tensor(0.0, device=x.device)
         if self.cat_causal_mask is not None and x_cat.shape[1] > 0:
@@ -315,8 +389,12 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         else:
             causal_lambda = self.causal_weight_max
 
+        macro_loss = torch.tensor(0.0, device=x.device)
+        if self.macro_relation_weight > 0 and x_num.shape[1] > 0:
+            macro_loss = self._macro_relation_loss(x_num, model_out_num, x_cat)
+
         return (d_loss.mean() + causal_lambda * cat_causal_loss,
-                c_loss.mean() + causal_lambda * causal_loss)
+                c_loss.mean() + causal_lambda * causal_loss + self.macro_relation_weight * macro_loss)
 
     @torch.no_grad()
     def sample(self, num_samples):
@@ -637,6 +715,83 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
             raw_logits[:, mask_logit_idx] *= 1 + self.w_cat
             raw_logits[:, mask_logit_idx] -= self.w_cat*y_only_raw_logits
         
+        # Causal Guidance (CFG-style): mask parent features and extrapolate
+        if self.causal_guidance_scale > 0 and (self.cg_num_mask is not None or self.cg_cat_mask is not None):
+            x_num_hat_uncond = x_num_hat.clone()
+            x_cat_hat_oh_uncond = x_cat_hat_oh.clone() if has_cat else x_cat_hat_oh
+            
+            if self.cg_num_mask is not None:
+                x_num_hat_uncond[:, self.cg_num_mask] = 0.0
+            
+            if self.cg_cat_mask is not None and has_cat:
+                cg_cat_slices = list(chain(*[self.slices_for_classes_with_mask[i] for i in self.cg_cat_mask]))
+                x_cat_hat_oh_uncond[:, cg_cat_slices] = 0.0
+            
+            denoised_uncond, raw_logits_uncond = self._denoise_fn(
+                x_num_hat_uncond.float(), x_cat_hat_oh_uncond,
+                t_hat.squeeze().repeat(b), sigma=sigma_num_hat.unsqueeze(0).repeat(b,1)
+            )
+            
+            denoised = denoised + self.causal_guidance_scale * (denoised - denoised_uncond)
+            raw_logits = raw_logits + self.causal_guidance_scale * (raw_logits - raw_logits_uncond)
+        
+        # Inference-time Macro Guidance: align group-wise injury mean
+        if self.macro_guidance_scale > 0 and i <= self.macro_guidance_start_step and self.macro_guidance_group_means and self.macro_injury_idx is not None and self.macro_group_indices:
+            injury_pred = denoised[:, self.macro_injury_idx]
+            # Build group keys from current cat predictions (use x_cat_hat as the best estimate)
+            group_keys = []
+            for batch_idx in range(b):
+                key_parts = []
+                for gidx in self.macro_group_indices:
+                    if gidx < x_cat_hat.shape[1]:
+                        key_parts.append(str(int(x_cat_hat[batch_idx, gidx].item())))
+                    else:
+                        key_parts.append("0")
+                group_keys.append("|".join(key_parts))
+            
+            # Compute current group means and apply guidance offset
+            # IMPORTANT: target_mean is in raw space, but denoised is in standardized space
+            g_mean = getattr(self, 'macro_guidance_global_mean', 0.0)
+            g_std = getattr(self, 'macro_guidance_global_std', 1.0)
+            if g_std < 1e-12:
+                g_std = 1.0
+            unique_keys = list(set(group_keys))
+            for gkey in unique_keys:
+                mask = [gk == gkey for gk in group_keys]
+                mask_tensor = torch.tensor(mask, device=denoised.device)
+                if mask_tensor.sum() == 0:
+                    continue
+                current_mean_std = injury_pred[mask_tensor].mean()
+                target_mean_raw = self.macro_guidance_group_means.get(gkey, current_mean_std.item() * g_std + g_mean)
+                # Convert target to standardized space for fair comparison
+                target_mean_std = (target_mean_raw - g_mean) / g_std
+                
+                # --- Robust Guidance: relative offset + adaptive scaling ---
+                raw_diff = target_mean_std - current_mean_std.item()
+                
+                if self.macro_guidance_mode == "relative":
+                    # Relative offset: scale by current magnitude to avoid over-correction
+                    denom = abs(current_mean_std.item()) + 1.0
+                    compressed_diff = math.tanh(raw_diff / denom)
+                    offset = compressed_diff * self.macro_guidance_scale
+                elif self.macro_guidance_mode == "adaptive":
+                    # Adaptive: reduce scale when drift is large
+                    drift_indicator = abs(raw_diff) / (abs(current_mean_std.item()) + 1e-8)
+                    adaptive_scale = self.macro_guidance_scale * math.exp(-drift_indicator / self.macro_guidance_adaptive_drift_threshold)
+                    offset = raw_diff * adaptive_scale
+                elif self.macro_guidance_mode == "annealed":
+                    # Annealed: reduce scale as denoising progresses (i from T down to 0)
+                    # i is the current step index (smaller = closer to clean data)
+                    # Use a temperature that increases as we get closer to clean data
+                    temperature = max(0.0, min(1.0, i / max(1, self.macro_guidance_start_step)))
+                    annealed_scale = self.macro_guidance_scale * temperature
+                    offset = raw_diff * annealed_scale
+                else:
+                    # Default absolute offset (original behavior)
+                    offset = raw_diff * self.macro_guidance_scale
+                
+                denoised[mask_tensor, self.macro_injury_idx] += offset
+        
         # Euler step
         d_cur = (x_num_hat - denoised) / sigma_num_hat
         x_num_next = x_num_hat + (sigma_num_next - sigma_num_hat) * d_cur
@@ -676,6 +831,26 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
                     )
                     denoised[:, self.num_mask_idx] *= 1 + self.w_num
                     denoised[:, self.num_mask_idx] -= self.w_num*y_only_denoised
+                
+                # Causal Guidance (2nd order correction)
+                if self.causal_guidance_scale > 0 and (self.cg_num_mask is not None or self.cg_cat_mask is not None):
+                    x_num_next_uncond = x_num_next.clone()
+                    x_cat_hat_oh_uncond = x_cat_hat_oh.clone() if has_cat else x_cat_hat_oh
+                    
+                    if self.cg_num_mask is not None:
+                        x_num_next_uncond[:, self.cg_num_mask] = 0.0
+                    
+                    if self.cg_cat_mask is not None and has_cat:
+                        cg_cat_slices = list(chain(*[self.slices_for_classes_with_mask[i] for i in self.cg_cat_mask]))
+                        x_cat_hat_oh_uncond[:, cg_cat_slices] = 0.0
+                    
+                    denoised_uncond2, raw_logits_uncond2 = self._denoise_fn(
+                        x_num_next_uncond.float(), x_cat_hat_oh_uncond,
+                        t_next.squeeze().repeat(b), sigma=sigma_num_next.unsqueeze(0).repeat(b,1)
+                    )
+                    
+                    denoised = denoised + self.causal_guidance_scale * (denoised - denoised_uncond2)
+                    raw_logits = raw_logits + self.causal_guidance_scale * (raw_logits - raw_logits_uncond2)
                 
                 d_prime = (x_num_next - denoised) / sigma_num_next
                 x_num_next = x_num_hat + (sigma_num_next - sigma_num_hat) * (0.5 * d_cur + 0.5 * d_prime)

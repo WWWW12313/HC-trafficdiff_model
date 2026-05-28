@@ -422,10 +422,8 @@ def train_stage(
     lambda_causal: float = 1.0,
     use_causal_masks: bool = True,
     mask_subdir: str = "causal_masks",
-    causal_start_frac: float = 0.0,
-    causal_warmup_frac: float = 0.2,
-    causal_mask_mode: str = "allowed_penalty",
     dataname: Optional[str] = None,
+    macro_relation_weight: float = 0.0,
 ):
     """训练指定 Stage 的扩散模型
 
@@ -526,16 +524,46 @@ def train_stage(
     model = Model(backbone, **raw_config["diffusion_params"]["edm_params"])
     model.to(device)
 
-    # Causal schedule: optional delay, then linear warmup.
+    # Causal warmup: first 20% of epochs have linearly increasing causal penalty
     total_epochs = raw_config["train"]["main"]["steps"]
-    causal_start_steps = int(total_epochs * float(causal_start_frac))
-    causal_warmup_steps = int(total_epochs * float(causal_warmup_frac))
-    print(
-        f"[causal_schedule] start_frac={causal_start_frac:.2f}, "
-        f"warmup_frac={causal_warmup_frac:.2f}, "
-        f"start_epoch={causal_start_steps}, warmup_epochs={causal_warmup_steps}, "
-        f"lambda_max={float(lambda_causal):.4f}, mask_mode={causal_mask_mode}"
-    )
+    causal_warmup_steps = int(total_epochs * 0.2)
+
+    # ---- Causal Guidance masks (Stage3 only) ----
+    cg_num_mask, cg_cat_mask = None, None
+    macro_injury_idx, macro_group_indices, cond_cat_indices = None, None, None
+    if stage == 3 and use_causal_masks:
+        try:
+            cg_json = CDT_ROOT / "data" / "processed" / "column_groups.json"
+            with open(cg_json, "r", encoding="utf-8") as f:
+                cg_groups = json.load(f)
+            parent_cols = set(cg_groups.get("stage1_features", []) + cg_groups.get("stage2_features", []))
+            # num indices: +1 offset because y is prepended
+            cg_num_mask = [i + 1 for i, c in enumerate(info["num_col_names"]) if c in parent_cols]
+            cg_cat_mask = [i for i, c in enumerate(info["cat_col_names"]) if c in parent_cols]
+            if cg_num_mask or cg_cat_mask:
+                print(f"[causal_guidance] parent num dims={cg_num_mask}, parent cat dims={cg_cat_mask}")
+            # Macro relation: injury target is num idx 0 (y prepended)
+            macro_injury_idx = 0
+            # v2: 多维 group 组合（细粒度分组，减少记忆空间）
+            cat_names = info.get("cat_col_names", [])
+            macro_group_indices = []
+            for col in ["SEASON", "WEATHER_CONDITION", "OSM_TYPE"]:
+                if col in cat_names:
+                    macro_group_indices.append(cat_names.index(col))
+            if not macro_group_indices:
+                macro_group_indices = None
+            # Proxy columns as conditional input (exclude from diffusion loss)
+            proxy_cols = {
+                "TOTAL_VEHICLES", "IS_MULTI_VEHICLE",
+                "NUMBER_OF_PEDESTRIANS_INJURED_BIN", "NUMBER_OF_PEDESTRIANS_KILLED_BIN",
+                "NUMBER_OF_CYCLIST_INJURED_BIN", "NUMBER_OF_CYCLIST_KILLED_BIN",
+                "NUMBER_OF_MOTORIST_INJURED_BIN", "NUMBER_OF_MOTORIST_KILLED_BIN",
+            }
+            cond_cat_indices = [i for i, c in enumerate(cat_names) if c in proxy_cols]
+            if cond_cat_indices:
+                print(f"[cond_input] proxy cat indices excluded from diffusion loss: {cond_cat_indices}")
+        except Exception as e:
+            print(f"[warn] Failed to build causal guidance masks: {e}")
 
     diffusion = UnifiedCtimeDiffusion(
         num_classes=categories,
@@ -546,8 +574,12 @@ def train_stage(
         device=torch.device(device),
         causal_weight_max=float(lambda_causal),
         causal_warmup_steps=causal_warmup_steps,
-        causal_start_step=causal_start_steps,
-        causal_mask_mode=causal_mask_mode,
+        cg_num_mask=cg_num_mask,
+        cg_cat_mask=cg_cat_mask,
+        macro_relation_weight=float(macro_relation_weight),
+        macro_injury_idx=macro_injury_idx,
+        macro_group_indices=macro_group_indices,
+        cond_cat_indices=cond_cat_indices,
     )
 
     num_params = sum(p.numel() for p in diffusion.parameters())
@@ -683,29 +715,16 @@ def main():
         help="掩码子目录名 (默认 causal_masks=binary; soft 实验传 causal_masks_soft)",
     )
     parser.add_argument(
-        "--causal_start_frac",
-        type=float,
-        default=0.0,
-        help="因果正则开始 epoch 占比，默认 0.0；例如 0.5 表示前半程关闭因果项",
-    )
-    parser.add_argument(
-        "--causal_warmup_frac",
-        type=float,
-        default=0.2,
-        help="因果正则线性升至 lambda_causal 的 epoch 占比，默认 0.2",
-    )
-    parser.add_argument(
-        "--causal_mask_mode",
-        type=str,
-        default="allowed_penalty",
-        choices=["allowed_penalty", "forbidden_penalty"],
-        help="因果 mask 损失语义：allowed_penalty 为旧行为；forbidden_penalty 只惩罚未保留的跨特征边",
-    )
-    parser.add_argument(
         "--dataname",
         type=str,
         default=None,
         help="Stage 3 数据目录名（位于 data/ 下），例如 nyc_crash_2024；Stage 1/2 会映射为 nyc_stage1_2024/nyc_stage2_2024",
+    )
+    parser.add_argument(
+        "--macro_relation_weight",
+        type=float,
+        default=0.0,
+        help="Macro Relation Consistency Loss 权重，0=关闭",
     )
     args = parser.parse_args()
 
@@ -723,10 +742,8 @@ def main():
         lambda_causal=args.lambda_causal,
         use_causal_masks=not args.no_causal_masks,
         mask_subdir=args.mask_subdir,
-        causal_start_frac=args.causal_start_frac,
-        causal_warmup_frac=args.causal_warmup_frac,
-        causal_mask_mode=args.causal_mask_mode,
         dataname=args.dataname,
+        macro_relation_weight=args.macro_relation_weight,
     )
 
 
